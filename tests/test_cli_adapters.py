@@ -131,3 +131,5 @@ def test_agy_turn_uses_accept_edits_mode(tmp_path, monkeypatch):
     assert adapter.execute_turn("請修改世界", tmp_path) == "完成"
     assert captured["cwd"] == str(tmp_path)
     assert "accept-edits" in captured["cmd"]
+    assert "--add-dir" in captured["cmd"]
+    assert str(tmp_path.resolve()) in captured["cmd"]

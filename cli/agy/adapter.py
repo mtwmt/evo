@@ -76,7 +76,15 @@ class AgyAdapter(BaseCLIAdapter):
 
         # 工作目錄由 cwd 指定；以 accept-edits 明確要求單回合代理直接在
         # staging 工作區實作，而非僅回覆設計建議。
-        cmd = ["agy", "--prompt", prompt, "--mode", "accept-edits"]
+        cmd = [
+            "agy",
+            "--prompt",
+            prompt,
+            "--mode",
+            "accept-edits",
+            "--add-dir",
+            str(workspace_path.resolve()),
+        ]
         if self.current_model:
             cmd.extend(["--model", self.current_model])
 
