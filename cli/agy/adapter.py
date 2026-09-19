@@ -48,12 +48,17 @@ class AgyAdapter(BaseCLIAdapter):
             self._models_cache_updated_at = now
             return []
 
-        # Agy 的輸出包含其他供應商可見的項目；此 Adapter 僅接受 Gemini 模型。
-        # 輸出格式為「模型 ID<TAB>顯示名稱」，略過狀態文字、說明及非 Gemini 模型。
+        # Agy 會列出目前帳號透過它可使用的所有供應商模型。模型 ID 位於
+        # 每行第一欄；略過「Fetching models...」一類狀態文字即可。先前只
+        # 保留 Gemini，會讓 Agy 實際提供的 Claude / GPT 模型在介面中消失。
         models: list[str] = []
         for line in proc.stdout.splitlines():
             model_id = line.split(maxsplit=1)[0] if line.strip() else ""
-            if re.fullmatch(r"gemini-[a-zA-Z0-9._-]+", model_id) and model_id not in models:
+            if (
+                "-" in model_id
+                and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]*", model_id)
+                and model_id not in models
+            ):
                 models.append(model_id)
         self._models_cache = models
         self._models_cache_updated_at = now
@@ -69,8 +74,9 @@ class AgyAdapter(BaseCLIAdapter):
         if not self.is_available():
             raise RuntimeError("系統中未安裝或未在 PATH 中找到 'agy' CLI。")
 
-        # 工作目錄由 cwd 指定；agy 並沒有 --workspace 參數。
-        cmd = ["agy", "--prompt", prompt]
+        # 工作目錄由 cwd 指定；以 accept-edits 明確要求單回合代理直接在
+        # staging 工作區實作，而非僅回覆設計建議。
+        cmd = ["agy", "--prompt", prompt, "--mode", "accept-edits"]
         if self.current_model:
             cmd.extend(["--model", self.current_model])
 

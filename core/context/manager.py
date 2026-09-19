@@ -98,6 +98,39 @@ class ContextManager:
 
         return metrics
 
+    def describe_visible_world(self) -> dict[str, Any]:
+        """摘要目前畫面，讓認知節拍能辨識世界是否仍停留在佔位符。"""
+        if not self.db_path.exists():
+            return {"has_scene": False, "needs_evolution": True}
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                row = conn.execute(
+                    "SELECT json_data FROM scene_primitives WHERE id = 'current_scene'"
+                ).fetchone()
+            if not row:
+                return {"has_scene": False, "needs_evolution": True}
+            scene = json.loads(row[0])
+            entities = scene.get("entities", [])
+            if not isinstance(entities, list) or not entities:
+                return {"has_scene": True, "entity_count": 0, "needs_evolution": True}
+            shapes = {str(entity.get("shape", "circle")) for entity in entities if isinstance(entity, dict)}
+            labels = [str(entity.get("label", "")) for entity in entities if isinstance(entity, dict)]
+            node_ids = sum(
+                str(entity.get("id", "")).startswith("node_")
+                for entity in entities if isinstance(entity, dict)
+            )
+            return {
+                "has_scene": True,
+                "entity_count": len(entities),
+                "shapes": sorted(shapes),
+                "node_id_count": node_ids,
+                "label_examples": labels[:8],
+                # 單一形狀、全為 node 且沒有具名世界事物，表示仍是種子佔位畫面。
+                "needs_evolution": node_ids == len(entities) and len(shapes) <= 1,
+            }
+        except (sqlite3.Error, json.JSONDecodeError, TypeError):
+            return {"has_scene": False, "needs_evolution": True}
+
     def fetch_recent_events(self, limit: int = 15) -> list[dict[str, Any]]:
         """從 habitat.db 撈取最近發生的宇宙事件。"""
         if not self.db_path.exists():
@@ -135,6 +168,7 @@ class ContextManager:
         signals = self.fetch_observer_signals(mark_as_read=True)
         metrics = self.fetch_world_metrics()
         events = self.fetch_recent_events()
+        visible_world = self.describe_visible_world()
 
         prompt_parts = [
             base_prompt,
@@ -143,6 +177,7 @@ class ContextManager:
             "## 當前宇宙狀態",
             f"**世界數值 (Metrics)**: {json.dumps(metrics, indent=2, ensure_ascii=False)}",
             f"**近期重大事件 (Events)**: {json.dumps(events, indent=2, ensure_ascii=False)}",
+            f"**目前可見畫面摘要**: {json.dumps(visible_world, indent=2, ensure_ascii=False)}",
         ]
 
         if signals:
@@ -153,8 +188,17 @@ class ContextManager:
             prompt_parts.append("## 觀察者傳來的天外神諭訊號\n本週期無外部訊號。")
 
         prompt_parts.append(
-            "\n## 本次回合指示\n請審視當前宇宙運行狀況，對 `habitat/main.py` 或輔助模組進行迭代進化代碼修改；"
-            "若當前宇宙狀態高度平衡且運行穩定、暫不需修改代碼，可回覆：`STATUS: SLEEP <N>`（N 為休眠觀測週期數）。"
+            "\n## 本次回合指示\n"
+            "你擁有世界題材、宇宙觀與規則的完全創作自主權。不要向人類索取題材、"
+            "角色、敘事或世界觀；請從已有狀態與你自己的判斷中決定下一步。\n"
+            "每回合先讀取目前的 `main.py`、資料庫狀態與畫面摘要；若畫面仍是全數 `node_*` "
+            "的單一幾何點，這是尚未完成的種子，**不得休眠**。請自行選擇下一個有趣方向，"
+            "直接修改 `main.py`，建立可累積的世界狀態、事件歷史與可見差異（至少不同類型的實體、"
+            "關係或階段），但保留既有 SQLite 與通用 scene primitives 協議。\n"
+            "若你選擇建立具行動力的存在，『誰』由你定義：可以是人、群體、動物、機器、異世界生命或任何形式。"
+            "它們的行為必須能造成可追溯後果：需求、意外、合作、探索或失敗，應改變後續狀態，並可能促成適應、"
+            "發明、技術、制度或環境變遷。將因果鏈記入 events 與持久世界狀態，而非只替 node 更新獨白。\n"
+            "只在世界已有清晰主題、連續演化且本回合確實不需要改動時，才可回覆 `STATUS: SLEEP <N>`。"
         )
 
         return "\n\n".join(prompt_parts)

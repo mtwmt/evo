@@ -56,7 +56,24 @@ let cosmicScene: CosmicScene | null = null;
 let lastEntityMap = new Map<string, any>();
 let isModelChangePending = false;
 let availableModelsMap: Record<string, string[]> = {
-  agy: [],
+  // Agy 的模型探索需要啟動 CLI；在它暫時不可用時仍完整保留帳號可選模型。
+  // 正常情況會由 /api/control/models 的 `agy models` 即時結果覆蓋此清單。
+  agy: [
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-medium",
+    "gemini-3.8-flash-low",
+    "gemini-3.7-flash-high",
+    "gemini-3.7-flash-medium",
+    "gemini-3.7-flash-low",
+    "gemini-3.6-flash-high",
+    "gemini-3.6-flash-medium",
+    "gemini-3.6-flash-low",
+    "gemini-3.1-pro-high",
+    "gemini-3.1-pro-low",
+    "claude-sonnet-4-6",
+    "claude-opus-4-6-thinking",
+    "gpt-oss-120b-medium",
+  ],
   codex: ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
   claude: ["fable", "opus", "sonnet", "haiku"],
 };
@@ -147,7 +164,14 @@ async function initModelsList() {
     if (res.ok) {
       const data = await res.json();
       if (data.models) {
-        availableModelsMap = data.models;
+        availableModelsMap = Object.fromEntries(
+          Object.entries(data.models).map(([cliName, models]) => [
+            cliName,
+            Array.isArray(models) && models.length > 0
+              ? models
+              : (availableModelsMap[cliName] || []),
+          ]),
+        );
       }
       if (data.active_cli) {
         cliSelect.value = data.active_cli;

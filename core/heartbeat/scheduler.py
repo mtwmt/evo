@@ -83,6 +83,10 @@ class CognitiveScheduler:
 
             # 1. 準備候選暫存工作區
             self.prepare_staging_workspace()
+            candidate_main = self.staging_dir / "main.py"
+            original_main = candidate_main.read_text(encoding="utf-8") if candidate_main.exists() else ""
+            visible_world = self.context_manager.describe_visible_world()
+            needs_visible_evolution = bool(visible_world.get("needs_evolution", True))
 
             # 2. 收集 Context 組裝提示詞
             prompt = self.context_manager.assemble_prompt()
@@ -104,11 +108,25 @@ class CognitiveScheduler:
                 # 檢查 AI 是否請求靜默休眠
                 sleep_match = re.search(r"STATUS:\s*SLEEP\s+(\d+)", ai_output, re.IGNORECASE)
                 if sleep_match:
-                    self.sleep_cycles_remaining = int(sleep_match.group(1))
-                    return {
-                        "status": "ai_sleep_requested",
-                        "cycles": self.sleep_cycles_remaining,
-                    }
+                    if not needs_visible_evolution:
+                        self.sleep_cycles_remaining = int(sleep_match.group(1))
+                        return {
+                            "status": "ai_sleep_requested",
+                            "cycles": self.sleep_cycles_remaining,
+                        }
+                    current_prompt = (
+                        "你嘗試休眠，但觀測器仍判定這是全數 node 的佔位世界。"
+                        "本回合必須自行決定一個世界方向並實際修改目前工作區的 main.py；"
+                        "不要只描述計畫，也不要回覆 STATUS: SLEEP。"
+                    )
+                    continue
+
+                if needs_visible_evolution and candidate_main.read_text(encoding="utf-8") == original_main:
+                    current_prompt = (
+                        "尚未偵測到 main.py 的實際變更。請在這個 staging 工作區中直接實作"
+                        "你選擇的世界規則與可見場景，不要只在回答文字中說明。"
+                    )
+                    continue
 
                 # 透過 Guardian 守門員檢驗候選版本
                 verif_res = self.guardian.verify(self.staging_dir)

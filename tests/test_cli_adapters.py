@@ -87,8 +87,8 @@ def test_model_selection_and_validation():
         switch_model("   ", adapter_name="agy")
 
 
-def test_agy_models_excludes_other_cli_providers(monkeypatch):
-    """Agy 模型選單只應呈現 Gemini，不可混入 Claude 或 GPT。"""
+def test_agy_models_includes_all_models_exposed_by_agy(monkeypatch):
+    """Agy 模型選單應完整呈現該 CLI 實際提供的模型。"""
     adapter = get_adapter("agy")
     monkeypatch.setattr(adapter, "is_available", lambda: True)
 
@@ -104,4 +104,30 @@ def test_agy_models_excludes_other_cli_providers(monkeypatch):
     monkeypatch.setattr("cli.agy.adapter.subprocess.run", lambda *args, **kwargs: Result())
     adapter._models_cache_updated_at = 0
 
-    assert adapter.fetch_available_models() == ["gemini-3.6-flash-low"]
+    assert adapter.fetch_available_models() == [
+        "gemini-3.6-flash-low",
+        "claude-sonnet-4-6",
+        "gpt-oss-120b-medium",
+    ]
+
+
+def test_agy_turn_uses_accept_edits_mode(tmp_path, monkeypatch):
+    """Agy 認知回合必須以可寫入 staging 的模式執行。"""
+    adapter = get_adapter("agy")
+    monkeypatch.setattr(adapter, "is_available", lambda: True)
+    captured: dict[str, object] = {}
+
+    class Result:
+        returncode = 0
+        stdout = "完成"
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["cwd"] = kwargs["cwd"]
+        return Result()
+
+    monkeypatch.setattr("cli.agy.adapter.subprocess.run", fake_run)
+    assert adapter.execute_turn("請修改世界", tmp_path) == "完成"
+    assert captured["cwd"] == str(tmp_path)
+    assert "accept-edits" in captured["cmd"]
