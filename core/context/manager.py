@@ -31,7 +31,7 @@ class ContextManager:
                 skill_contents.append(f"### 技能：{name}\n{skill_file.read_text(encoding='utf-8')}")
         return "\n\n".join(skill_contents)
 
-    def fetch_observer_signals(self, mark_as_read: bool = True) -> list[dict[str, Any]]:
+    def fetch_observer_signals(self, mark_as_read: bool = False) -> list[dict[str, Any]]:
         """從 habitat.db 撈取尚未處理的觀察者對話／神諭訊號。"""
         if not self.db_path.exists():
             return []
@@ -48,7 +48,8 @@ class ContextManager:
                     return []
 
                 cursor.execute(
-                    "SELECT id, sender, message, timestamp FROM observer_signals WHERE processed = 0 ORDER BY timestamp ASC"
+                    "SELECT id, sender, message, timestamp, target_entity_id "
+                    "FROM observer_signals WHERE processed = 0 ORDER BY timestamp ASC, id ASC"
                 )
                 rows = cursor.fetchall()
                 for row in rows:
@@ -57,6 +58,7 @@ class ContextManager:
                         "sender": row[1],
                         "message": row[2],
                         "timestamp": row[3],
+                        "target_entity_id": row[4],
                     })
 
                 # 標記為已讀
@@ -73,6 +75,28 @@ class ContextManager:
             print(f"[ContextManager] 撈取觀察者訊號失敗：{exc}")
 
         return signals
+
+    def acknowledge_observer_signals(self, ids: list[int]) -> None:
+        """只確認指定回合已成功處理的觀察者訊息。"""
+        if not ids:
+            return
+        if any(type(signal_id) is not int for signal_id in ids):
+            raise ValueError("觀察者訊息 ID 必須是整數")
+        if not self.db_path.exists():
+            return
+        placeholders = ",".join("?" for _ in ids)
+        with sqlite3.connect(self.db_path) as conn:
+            table_exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='observer_signals'"
+            ).fetchone()
+            if table_exists is None:
+                return
+            conn.execute(
+                f"UPDATE observer_signals SET processed = 1 "
+                f"WHERE processed = 0 AND id IN ({placeholders})",
+                ids,
+            )
+            conn.commit()
 
     def fetch_world_metrics(self) -> dict[str, Any]:
         """從 habitat.db 讀取當前最新的世界指標。"""
@@ -115,18 +139,12 @@ class ContextManager:
                 return {"has_scene": True, "entity_count": 0, "needs_evolution": True}
             shapes = {str(entity.get("shape", "circle")) for entity in entities if isinstance(entity, dict)}
             labels = [str(entity.get("label", "")) for entity in entities if isinstance(entity, dict)]
-            node_ids = sum(
-                str(entity.get("id", "")).startswith("node_")
-                for entity in entities if isinstance(entity, dict)
-            )
             return {
                 "has_scene": True,
                 "entity_count": len(entities),
                 "shapes": sorted(shapes),
-                "node_id_count": node_ids,
                 "label_examples": labels[:8],
-                # 單一形狀、全為 node 且沒有具名世界事物，表示仍是種子佔位畫面。
-                "needs_evolution": node_ids == len(entities) and len(shapes) <= 1,
+                "needs_evolution": False,
             }
         except (sqlite3.Error, json.JSONDecodeError, TypeError):
             return {"has_scene": False, "needs_evolution": True}
@@ -161,11 +179,10 @@ class ContextManager:
 
         return events
 
-    def assemble_prompt(self) -> str:
-        """組裝完整的單回合 AI 提示詞。"""
+    def _assemble_prompt(self, signals: list[dict[str, Any]]) -> str:
+        """使用指定的訊息批次組裝單回合提示詞，不改變其處理狀態。"""
         base_prompt = self.load_base_prompt()
         skills = self.load_skills()
-        signals = self.fetch_observer_signals(mark_as_read=True)
         metrics = self.fetch_world_metrics()
         events = self.fetch_recent_events()
         visible_world = self.describe_visible_world()
@@ -183,7 +200,9 @@ class ContextManager:
         if signals:
             prompt_parts.append("## 觀察者傳來的天外神諭訊號")
             for s in signals:
-                prompt_parts.append(f"- [{s['sender']}] ({s['timestamp']}): {s['message']}")
+                target = s.get("target_entity_id")
+                target_text = f"（目標實體：{target}）" if target else ""
+                prompt_parts.append(f"- [{s['sender']}] ({s['timestamp']}){target_text}: {s['message']}")
         else:
             prompt_parts.append("## 觀察者傳來的天外神諭訊號\n本週期無外部訊號。")
 
@@ -191,14 +210,26 @@ class ContextManager:
             "\n## 本次回合指示\n"
             "你擁有世界題材、宇宙觀與規則的完全創作自主權。不要向人類索取題材、"
             "角色、敘事或世界觀；請從已有狀態與你自己的判斷中決定下一步。\n"
-            "每回合先讀取目前的 `main.py`、資料庫狀態與畫面摘要；若畫面仍是全數 `node_*` "
-            "的單一幾何點，這是尚未完成的種子，**不得休眠**。請自行選擇下一個有趣方向，"
-            "直接修改 `main.py`，建立可累積的世界狀態、事件歷史與可見差異（至少不同類型的實體、"
+            "若 `main.py` 尚不存在，這是合法的空白創世狀態；請自行建立 `main.py` 與所需模組，"
+            "不可因目前沒有世界而休眠。若入口已存在，每回合先讀取目前的 `main.py`、"
+            "資料庫狀態與畫面摘要。請自行選擇下一個有趣方向，"
+            "自行修改候選工作區的程式，可新增、拆分或刪除模組，保留 `main.py` 作為入口；"
+            "建立可累積的世界狀態、事件歷史與可見差異（至少不同類型的實體、"
             "關係或階段），但保留既有 SQLite 與通用 scene primitives 協議。\n"
             "若你選擇建立具行動力的存在，『誰』由你定義：可以是人、群體、動物、機器、異世界生命或任何形式。"
             "它們的行為必須能造成可追溯後果：需求、意外、合作、探索或失敗，應改變後續狀態，並可能促成適應、"
-            "發明、技術、制度或環境變遷。將因果鏈記入 events 與持久世界狀態，而非只替 node 更新獨白。\n"
+            "發明、技術、制度或環境變遷。將因果鏈記入 events 與持久世界狀態。\n"
             "只在世界已有清晰主題、連續演化且本回合確實不需要改動時，才可回覆 `STATUS: SLEEP <N>`。"
         )
 
         return "\n\n".join(prompt_parts)
+
+    def prepare_turn_context(self) -> tuple[str, list[int]]:
+        """準備提示詞與訊息 ID；訊息保留待部署成功後由呼叫端確認。"""
+        signals = self.fetch_observer_signals(mark_as_read=False)
+        return self._assemble_prompt(signals), [signal["id"] for signal in signals]
+
+    def assemble_prompt(self) -> str:
+        """讀取提示詞預覽，不確認或消費訊息。"""
+        signals = self.fetch_observer_signals(mark_as_read=False)
+        return self._assemble_prompt(signals)

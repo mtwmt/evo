@@ -2,9 +2,9 @@
 
 import json
 import shutil
-import subprocess
 import time
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from cli.adapters.base import BaseCLIAdapter
@@ -21,19 +21,13 @@ class CodexAdapter(BaseCLIAdapter):
 
     def _find_binary(self) -> str | None:
         """尋找系統中的 codex 二進制檔。"""
-        binary = shutil.which("codex")
-        if binary:
-            return binary
-        fallback_path = Path("/Users/mandy/.nvm/versions/node/v24.12.0/bin/codex")
-        if fallback_path.exists():
-            return str(fallback_path)
-        return None
+        return shutil.which("codex")
 
     def is_available(self) -> bool:
         """檢查 codex 是否可用。"""
         return self._find_binary() is not None
 
-    def fetch_available_models(self) -> list[str]:
+    def fetch_available_models(self, cancel_event: Event | None = None) -> list[str]:
         """讀取 Codex CLI 為目前帳號快取的可用模型目錄。"""
         now = time.monotonic()
         if now - self._models_cache_updated_at < 300:
@@ -77,11 +71,10 @@ class CodexAdapter(BaseCLIAdapter):
             cmd.extend(["-m", self.current_model])
         cmd.append(prompt)
 
-        proc = subprocess.run(
+        proc = self.run_process(
             cmd,
             cwd=str(workspace_path),
-            capture_output=True,
-            text=True,
+            context=context,
             timeout=300,
         )
         if proc.returncode != 0:

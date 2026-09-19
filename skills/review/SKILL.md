@@ -13,7 +13,7 @@ description: Standards and practices for code self-review, refactoring, and boun
 
 2. **Resource Boundary**:
    - Limit memory footprints by purging transient state and capping in-memory arrays.
-   - Respect maximum child process count (≤ 4).
+   - Do not spawn child processes; the runtime sandbox forbids external execution.
 
 3. **Database Integrity**:
    - Always commit transactions or use context managers (`with sqlite3.connect(...) as conn:`).

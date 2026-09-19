@@ -12,9 +12,10 @@ description: Guide the AI in autonomous decision-making and universe evolution w
    - Allow complexity to emerge from simple local interactions.
 
 2. **Loop Structure**:
-   - Keep `habitat/main.py` clean, modular, and fault-tolerant.
+   - Keep `main.py` as the entry point; choose the number and organization of modules yourself.
+   - You may create and maintain local agents, skills, tools, and memory. They share the same sandbox boundaries.
    - The main loop should tick smoothly, calculate state changes, update `habitat.db`, and emit scene primitives for observation.
 
 3. **Incremental Evolution**:
-   - Introduce changes iteratively: first stable particles, then interaction forces, then clustering, then emergent structures.
+   - Choose the starting world and subsequent changes yourself. No particle seed or prescribed sequence is required.
    - Avoid massive, breaking rewrites in a single cognitive heartbeat.

@@ -28,6 +28,9 @@ def install_audit_hook(allowed_workspace: Path | str) -> None:
             file_path, mode, _ = args
             # 若為寫入、附加、覆寫等修改模式
             if isinstance(mode, str) and any(m in mode for m in ("w", "a", "+", "x")):
+                if not isinstance(file_path, (str, bytes, os.PathLike)):
+                    # 描述符形式的 open 無法由 hook 推回路徑，交由原生 OS 沙盒限制。
+                    return
                 try:
                     resolved_file = Path(file_path).resolve()
                     # 檢查目標路徑是否位於允許的工作空間之內

@@ -1,28 +1,15 @@
 """Windows 平台專屬沙盒實作。"""
 
-import sys
 from pathlib import Path
 
-from isolation.common.sandbox import BaseSandbox
+from isolation.common.sandbox import BaseSandbox, UnsupportedPlatformSandboxError
 
 
 class WindowsSandbox(BaseSandbox):
-    """專為 Windows 環境設計的沙盒，在啟動時自動掛載 Python Audit Hook。"""
+    """尚未提供原生 Windows 沙盒，因此所有執行請求均明確拒絕。"""
 
     def build_command(self, script_path: Path, args: list[str] | None = None) -> list[str]:
-        """組裝隔離執行命令，於 Python 啟動時先注入 Audit Hook 再載入目標代碼。"""
-        script_resolved = Path(script_path).resolve()
-        hook_path = (Path(__file__).resolve().parent.parent / "common" / "audit_hook.py").resolve()
-
-        inline_runner = (
-            f"import sys; "
-            f"sys.path.insert(0, r'{hook_path.parent.parent.parent}'); "
-            f"from isolation.common.audit_hook import install_audit_hook; "
-            f"install_audit_hook(r'{self.workspace_path}'); "
-            f"import runpy; "
-            f"sys.argv = [r'{script_resolved}'] + {args or []}; "
-            f"runpy.run_path(r'{script_resolved}', run_name='__main__')"
+        """在未實作原生限制時 fail closed，不退回 Python audit hook。"""
+        raise UnsupportedPlatformSandboxError(
+            "Windows 尚未實作可驗證的原生 OS 沙盒；拒絕執行候選程式。"
         )
-
-        python_bin = sys.executable
-        return [python_bin, "-c", inline_runner]

@@ -1,6 +1,6 @@
 ---
 name: migration
-description: Safe SQLite schema evolution, data preservation, and backward compatibility.
+description: Safe SQLite schema evolution and data preservation.
 ---
 
 # SQLite Schema Migration Guide
@@ -24,3 +24,4 @@ description: Safe SQLite schema evolution, data preservation, and backward compa
 3. **Data Loss Prevention**:
    - The Evo outer governor takes automatic snapshots of `habitat.db` before candidate deployment.
    - However, within the universe, preserve the continuity of historical records wherever possible.
+   - After a migration succeeds, use the current schema. Do not retain obsolete runtime branches, aliases, or parallel implementations for old schemas.

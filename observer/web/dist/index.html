@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Evo（衍界） - AI 自主發展宇宙觀測系統</title>
-    <script type="module" crossorigin src="/assets/index-DcC0WXUx.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CQLR_hot.css">
+    <script type="module" crossorigin src="/assets/index-BzJ_MYOU.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-p7CHvyPU.css">
   </head>
   <body>
     <div id="app">
@@ -34,27 +34,29 @@
           </div>
 
 
-          <div id="codex-effort-control" class="control-group compact-field" hidden>
-            <label for="codex-effort-select">思考</label>
-            <select id="codex-effort-select" aria-label="Codex 思考速度">
-              <option value="low">快速</option>
-              <option value="medium">平衡</option>
-              <option value="high">深入</option>
-              <option value="xhigh">更深入</option>
-              <option value="max">最大</option>
-              <option value="ultra">Ultra</option>
-            </select>
-          </div>
+          <div class="effort-slot">
+            <div id="codex-effort-control" class="control-group compact-field" hidden>
+              <label for="codex-effort-select">思考</label>
+              <select id="codex-effort-select" aria-label="Codex 思考速度">
+                <option value="low">快速</option>
+                <option value="medium">平衡</option>
+                <option value="high">深入</option>
+                <option value="xhigh">更深入</option>
+                <option value="max">最大</option>
+                <option value="ultra">Ultra</option>
+              </select>
+            </div>
 
-          <div id="claude-effort-control" class="control-group compact-field" hidden>
-            <label for="claude-effort-select">思考</label>
-            <select id="claude-effort-select" aria-label="Claude 思考速度">
-              <option value="low">快速</option>
-              <option value="medium">平衡</option>
-              <option value="high">深入</option>
-              <option value="xhigh">更深入</option>
-              <option value="max">最大</option>
-            </select>
+            <div id="claude-effort-control" class="control-group compact-field" hidden>
+              <label for="claude-effort-select">思考</label>
+              <select id="claude-effort-select" aria-label="Claude 思考速度">
+                <option value="low">快速</option>
+                <option value="medium">平衡</option>
+                <option value="high">深入</option>
+                <option value="xhigh">更深入</option>
+                <option value="max">最大</option>
+              </select>
+            </div>
           </div>
 
           <div class="control-group evolution-field">
@@ -68,29 +70,55 @@
           <button id="pause-btn" class="action-btn">暫停</button>
         </div>
 
+        <div id="evolution-status" class="evolution-status" role="status" aria-live="polite">
+          AI 尚未開始
+        </div>
+
         <div class="telemetry">
           <span id="stat-cpu">CPU<br><b>0%</b></span>
           <span id="stat-ram">RAM<br><b>0 MB</b></span>
-          <span id="stat-epoch">紀元<br><b>0</b></span>
+          <span id="stat-epoch">模擬紀元<br><b>0</b></span>
         </div>
       </header>
 
       <!-- 主要觀測工作區 -->
       <main id="main-content">
-        <!-- Phaser 2D 畫布容器 -->
-        <div id="canvas-container">
-          <div class="canvas-toolbar" aria-label="宇宙檢視工具">
-            <button id="zoom-out-btn" type="button" aria-label="縮小宇宙畫面" title="縮小">−</button>
-            <button id="zoom-reset-btn" type="button" aria-label="重設宇宙縮放">1:1</button>
-            <button id="zoom-in-btn" type="button" aria-label="放大宇宙畫面" title="放大">＋</button>
-            <button id="pan-btn" type="button" aria-label="拖曳移動畫面" title="拖曳移動畫面">✥</button>
+        <div id="workspace">
+          <!-- Phaser 2D 畫布容器 -->
+          <div id="canvas-container">
+            <div class="canvas-toolbar" aria-label="宇宙檢視工具">
+              <button id="zoom-out-btn" type="button" aria-label="縮小宇宙畫面" title="縮小">−</button>
+              <button id="zoom-reset-btn" type="button" aria-label="重設宇宙縮放">1:1</button>
+              <button id="zoom-in-btn" type="button" aria-label="放大宇宙畫面" title="放大">＋</button>
+              <button id="pan-btn" type="button" aria-label="切換拖曳移動畫面" aria-pressed="false" title="拖曳畫面（再按一次返回角色選取）">✥</button>
+            </div>
           </div>
-        </div>
 
-        <div id="sidebar-resizer" role="separator" aria-label="調整側欄寬度" aria-orientation="vertical"></div>
+          <div id="sidebar-resizer" role="separator" aria-label="調整側欄寬度" aria-orientation="vertical"></div>
 
-        <!-- 側邊觀測儀表板 -->
-        <aside id="sidebar">
+          <!-- 側邊觀測儀表板 -->
+          <aside id="sidebar">
+          <section class="panel cosmic-reflection-panel" aria-label="宇宙公開意識">
+            <div class="panel-header">
+              <h3>宇宙意識</h3>
+              <span id="cosmic-mood" class="badge">尚未命名</span>
+            </div>
+            <div class="cosmic-epoch">
+              <span class="cosmic-label">目前紀元</span>
+              <strong id="cosmic-epoch-name">宇宙尚未為自己命名</strong>
+            </div>
+            <dl class="cosmic-reflection-grid">
+              <div>
+                <dt>當下意圖</dt>
+                <dd id="cosmic-intent">正在觀察自己如何成形…</dd>
+              </div>
+              <div>
+                <dt>最近反思</dt>
+                <dd id="cosmic-reflection">尚未留下可公開的內在記錄。</dd>
+              </div>
+            </dl>
+          </section>
+
           <!-- 生命體第一人稱內在獨白面板 -->
           <section class="panel monologue-panel">
             <div class="panel-header">
@@ -111,12 +139,39 @@
               </blockquote>
             </div>
 
-            <div class="oracle-input-row">
-              <input type="text" id="oracle-input" placeholder="輸入訊號，與宇宙對話…" aria-label="宇宙對話訊息" />
-              <button id="oracle-send-btn" type="button">傳送</button>
-            </div>
-            <div id="oracle-feedback" class="feedback-msg" aria-live="polite"></div>
-            <div id="dialogue-log" class="dialogue-log" hidden aria-live="polite"></div>
+            <section id="entity-biography" class="entity-biography" hidden aria-label="實體生平與事蹟">
+              <div class="section-heading">
+                <h4><span id="biography-name">實體</span> 的生平</h4>
+                <span id="biography-event-count" class="badge">0 筆紀錄</span>
+              </div>
+              <dl class="biography-facts">
+                <div><dt>類型</dt><dd id="biography-kind">尚未辨識</dd></div>
+                <div><dt>現況</dt><dd id="biography-state">尚未觀測</dd></div>
+              </dl>
+              <div class="biography-heading">近期事蹟</div>
+              <ol id="biography-achievements"></ol>
+            </section>
+
+            <section class="chat-section" aria-label="生命體對話">
+              <div class="section-heading">
+                <h4>與 <span id="dialogue-target">宇宙</span> 對話</h4>
+                <span id="dialogue-status" class="badge">請選擇意識體</span>
+              </div>
+              <div id="dialogue-log" class="dialogue-log" hidden aria-live="polite"></div>
+              <div class="oracle-input-row">
+                <input type="text" id="oracle-input" placeholder="輸入訊號，與宇宙對話…" aria-label="宇宙對話訊息" />
+                <button id="oracle-send-btn" type="button">傳送</button>
+              </div>
+              <div id="oracle-feedback" class="feedback-msg" aria-live="polite"></div>
+            </section>
+
+            <section class="activity-section" aria-label="近期互動紀錄">
+              <div class="section-heading">
+                <h4>近期互動</h4>
+                <span class="badge">事件紀錄</span>
+              </div>
+              <ul id="interaction-activity-list"></ul>
+            </section>
 
             <!-- 群體意識流動廣播 -->
             <div class="stream-section">
@@ -133,15 +188,27 @@
             </div>
           </section>
 
-          <!-- 即時歷史事件流 -->
-          <section class="panel events-panel evolution-panel">
-            <div class="panel-header">
-              <h3>演進歷程</h3>
-              <span id="history-scope" class="badge">全域事件</span>
+          </aside>
+        </div>
+
+        <!-- 橫向時間線：最新事件固定從最前方開始 -->
+        <section id="timeline-panel" class="panel events-panel" aria-label="宇宙時間線">
+          <div class="panel-header">
+            <h3>宇宙時間線</h3>
+            <span id="history-scope" class="badge">全域事件</span>
+          </div>
+          <div id="timeline-meta" class="timeline-meta">正在讀取宇宙紀年…</div>
+          <div class="timeline-streams">
+            <div class="timeline-stream milestone-stream">
+              <div class="timeline-heading">大事記</div>
+              <ol id="milestones-list"></ol>
             </div>
-            <ul id="events-list"></ul>
-          </section>
-        </aside>
+            <div class="timeline-stream recent-stream">
+              <div class="timeline-heading">宇宙事件・最新在前</div>
+              <ul id="events-list"></ul>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   </body>

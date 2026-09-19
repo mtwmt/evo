@@ -1,6 +1,8 @@
 """Evo 全域配置、持久化控制設定與環境設定。"""
 
 import json
+import tempfile
+import threading
 from pathlib import Path
 from typing import Literal
 
@@ -92,6 +94,7 @@ _PERSISTED_FIELDS = frozenset({
     "speed_mode",
     "paused",
 })
+_CONFIG_SAVE_LOCK = threading.RLock()
 
 
 def _load_config() -> EvoConfig:
@@ -111,11 +114,22 @@ config = _load_config()
 
 def save_config() -> None:
     """原子寫入可由使用者調整的控制設定，供下次啟動還原。"""
-    RUNTIME_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {field: getattr(config, field) for field in _PERSISTED_FIELDS}
-    pending_path = RUNTIME_CONFIG_PATH.with_suffix(".tmp")
-    pending_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    pending_path.replace(RUNTIME_CONFIG_PATH)
+    with _CONFIG_SAVE_LOCK:
+        RUNTIME_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {field: getattr(config, field) for field in _PERSISTED_FIELDS}
+        pending_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=RUNTIME_CONFIG_PATH.parent,
+                prefix=f".{RUNTIME_CONFIG_PATH.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as pending_file:
+                pending_path = Path(pending_file.name)
+                pending_file.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            pending_path.replace(RUNTIME_CONFIG_PATH)
+        finally:
+            if pending_path is not None and pending_path.exists():
+                pending_path.unlink()

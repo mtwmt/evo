@@ -84,6 +84,12 @@ pnpm-debug.log*
 # Staging 候選目錄（由排程器動態複製與替換）
 /habitat_staging/
 
+# 受控套件 bootstrap 快取（由 sandbox-requirements.txt 可重建）
+**/.evo-packages/
+**/.evo-packages.previous/
+**/.evo-packages-stage-*/
+**/.evo-packages-home-*/
+
 # 快照備份目錄（保留目錄本身結構，忽略動態快照內容）
 /backups/*
 !/backups/.gitkeep

@@ -1,8 +1,8 @@
 """Claude CLI 適配器實作。"""
 
 import shutil
-import subprocess
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from cli.adapters.base import BaseCLIAdapter
@@ -19,7 +19,7 @@ class ClaudeAdapter(BaseCLIAdapter):
         """檢查系統中是否存在 claude 命令。"""
         return shutil.which("claude") is not None
 
-    def fetch_available_models(self) -> list[str]:
+    def fetch_available_models(self, cancel_event: Event | None = None) -> list[str]:
         """回傳目前 Claude Code CLI 支援的模型別名。"""
         # Claude Code 沒有 `claude models` 子命令；其 --help 指定下列可用別名。
         return ["fable", "opus", "sonnet", "haiku"]
@@ -44,11 +44,10 @@ class ClaudeAdapter(BaseCLIAdapter):
         cmd.extend(["--effort", self.current_effort])
         cmd.extend(["-p", prompt])
 
-        proc = subprocess.run(
+        proc = self.run_process(
             cmd,
             cwd=str(workspace_path),
-            capture_output=True,
-            text=True,
+            context=context,
             timeout=300,
         )
         if proc.returncode != 0:

@@ -1,4 +1,4 @@
-"""提供 habitat 代碼隔離執行的抽象沙盒基底類別。"""
+"""提供 habitat 程式碼隔離執行的抽象沙盒基底類別。"""
 
 import os
 from abc import ABC, abstractmethod
@@ -15,7 +15,6 @@ class BaseSandbox(ABC):
         """建立乾淨的環境變數字典，過濾敏感金鑰與憑證。"""
         allowed_vars = {
             "PATH",
-            "PYTHONPATH",
             "HOME",
             "LANG",
             "LC_ALL",
@@ -25,13 +24,12 @@ class BaseSandbox(ABC):
         }
         env = {k: v for k, v in os.environ.items() if k in allowed_vars}
 
-        # 注入 audit hook 所需的工作空間路徑
-        env["EVO_ALLOWED_WORKSPACE"] = str(self.workspace_path)
+        # 將可寫的家目錄與暫存目錄限制在候選工作區內。
+        env["HOME"] = str(self.workspace_path)
+        env["TMPDIR"] = str(self.workspace_path)
 
-        # 將專案根目錄加入 PYTHONPATH，使子進程能引入必要模組
-        project_root = Path(__file__).resolve().parent.parent.parent
-        existing_pythonpath = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = f"{project_root}:{existing_pythonpath}".strip(":")
+        # 注入 audit hook 所需的工作空間路徑。
+        env["EVO_ALLOWED_WORKSPACE"] = str(self.workspace_path)
 
         return env
 
@@ -39,3 +37,11 @@ class BaseSandbox(ABC):
     def build_command(self, script_path: Path, args: list[str] | None = None) -> list[str]:
         """組裝在沙盒中執行目標腳本的命令陣列。"""
         pass
+
+
+class SandboxUnavailableError(RuntimeError):
+    """目前平台或執行環境無法提供真正的原生作業系統隔離。"""
+
+
+class UnsupportedPlatformSandboxError(SandboxUnavailableError):
+    """目前平台尚未實作可驗證的原生沙盒。"""

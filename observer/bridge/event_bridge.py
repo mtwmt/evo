@@ -64,6 +64,7 @@ class ObserverBridge:
             },
             "resources": {
                 "cpu_percent": round(res.cpu_percent, 1),
+                "cpu_sampled": res.cpu_sampled,
                 "ram_mb": round(res.ram_bytes / (1024 * 1024), 1),
                 "subprocesses": res.subprocess_count,
                 "habitat_size_mb": round(res.habitat_size_bytes / (1024 * 1024), 2),

@@ -17,6 +17,9 @@ export class CosmicScene extends Phaser.Scene {
   private readonly minZoom = 0.65;
   private readonly maxZoom = 2.5;
   private interactionMode: CanvasInteractionMode = "select";
+  private spaceKey: Phaser.Input.Keyboard.Key | null = null;
+  private spacePanActive = false;
+  private isPanning = false;
   private panStart: Phaser.Math.Vector2 | null = null;
   private panStartScroll: Phaser.Math.Vector2 | null = null;
 
@@ -28,23 +31,32 @@ export class CosmicScene extends Phaser.Scene {
     this.graphics = this.add.graphics();
     this.labelGroup = this.add.group();
     this.bubbleGroup = this.add.group();
+    this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE) ?? null;
 
     // 監聽畫布點擊事件，偵測是否點擊特定生命體
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       if (!this.currentSceneData?.entities) return;
 
-      if (this.interactionMode === "pan") {
+      // 平常左鍵選取角色；按住空白鍵可暫時拖曳，不必切換工具。
+      if (
+        pointer.leftButtonDown()
+        && (this.interactionMode === "pan" || this.spacePanActive || this.spaceKey?.isDown)
+      ) {
+        this.isPanning = true;
         this.panStart = new Phaser.Math.Vector2(pointer.x, pointer.y);
         this.panStartScroll = new Phaser.Math.Vector2(this.cameras.main.scrollX, this.cameras.main.scrollY);
         return;
       }
 
       let found = false;
+      const camera = this.cameras.main;
+      const worldPoint = camera.getWorldPoint(pointer.x, pointer.y);
       for (const entity of this.currentSceneData.entities) {
-        const dx = pointer.x - entity.x;
-        const dy = pointer.y - entity.y;
+        const dx = worldPoint.x - entity.x;
+        const dy = worldPoint.y - entity.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const radius = (entity.size || 6) + 10; // 放大點擊熱區
+        // 實體大小採世界單位，額外熱區固定為 10 個畫面像素。
+        const radius = (entity.size || 6) + 10 / camera.zoom;
 
         if (dist <= radius) {
           this.selectedEntityId = entity.id;
@@ -64,7 +76,7 @@ export class CosmicScene extends Phaser.Scene {
     });
 
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-      if (this.interactionMode === "pan" && this.panStart && this.panStartScroll) {
+      if (this.isPanning && pointer.isDown && this.panStart && this.panStartScroll) {
         const camera = this.cameras.main;
         camera.scrollX = this.panStartScroll.x - (pointer.x - this.panStart.x) / camera.zoom;
         camera.scrollY = this.panStartScroll.y - (pointer.y - this.panStart.y) / camera.zoom;
@@ -74,6 +86,13 @@ export class CosmicScene extends Phaser.Scene {
     });
 
     this.input.on("pointerup", () => {
+      this.isPanning = false;
+      this.panStart = null;
+      this.panStartScroll = null;
+    });
+
+    this.input.on("pointerupoutside", () => {
+      this.isPanning = false;
       this.panStart = null;
       this.panStartScroll = null;
     });
@@ -102,9 +121,15 @@ export class CosmicScene extends Phaser.Scene {
 
   public setInteractionMode(mode: CanvasInteractionMode): void {
     this.interactionMode = mode;
+    this.isPanning = false;
     this.panStart = null;
     this.panStartScroll = null;
     this.events.emit("interaction-mode-changed", mode);
+  }
+
+  /** 頁面層捕捉空白鍵，避免畫布尚未取得焦點時 Phaser 漏掉按鍵。 */
+  public setSpacePanActive(active: boolean): void {
+    this.spacePanActive = active;
   }
 
   public resetZoom(): void {

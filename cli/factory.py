@@ -1,5 +1,7 @@
 """CLI 適配器工廠與狀態管理器。"""
 
+import threading
+
 from cli.adapters.base import BaseCLIAdapter
 from cli.agy.adapter import AgyAdapter
 from cli.claude.adapter import ClaudeAdapter
@@ -27,9 +29,21 @@ def get_adapter(name: str | None = None) -> BaseCLIAdapter:
     return _ADAPTERS[target_name]
 
 
-def get_models_map() -> dict[str, list[str]]:
+def cancel_all_cli_processes() -> None:
+    """停止所有已註冊適配器所管理的 CLI 程序樹。"""
+    for adapter in _ADAPTERS.values():
+        adapter.cancel_active_processes()
+
+
+def get_models_map(cancel_event: threading.Event | None = None) -> dict[str, list[str]]:
     """動態向各 CLI 適配器查詢最新模型清單，拒絕死板 Hardcode。"""
-    return {name: adapter.fetch_available_models() for name, adapter in _ADAPTERS.items()}
+    models = {}
+    for name, adapter in _ADAPTERS.items():
+        if cancel_event is not None and cancel_event.is_set():
+            break
+        models[name] = (adapter.fetch_available_models(cancel_event=cancel_event)
+                        if cancel_event is not None else adapter.fetch_available_models())
+    return models
 
 
 def switch_model(model_name: str, adapter_name: str | None = None) -> str:

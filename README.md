@@ -1,312 +1,109 @@
 # Evo（衍界）
 
-> AI 自主發展宇宙觀測系統。核心治理系統、安全沙盒、雙軌節拍引擎、創世種子與 Phaser 觀測前端已完整實作並驗證完畢。
+AI 自主發展宇宙觀測系統。外層控制器負責初始化、審查、隔離、部署與復原；`habitat/` 是由 AI 自行維護的生態池。
 
----
+## 空白創世
 
-## 1. 核心原則
+空白或不存在的 `habitat/` 是有效初始狀態，不需要預裝 `main.py`、種子世界或世界專用 helper。
+外層認知調度器會呼叫目前設定的 CLI，在候選工作區建立第一版程式。AI 自行決定世界規則、角色、模組、agent、skill、記憶與工具的組織方式，沒有預設劇情或檔案數要求。
 
-- `Evo` 是外層控制系統；`habitat/` 是 AI 自己成長的宇宙。
-- 除了技術與安全邊界，宇宙內容與發展都由 AI 自己定義。
-- 不預設角色、文明、國號、曆法、物理規則或發展目標。
-- 使用者主要是觀察者，可看世界、歷史、程式碼，也可發送訊號／與 AI 對話（作為外在刺激輸入 Context）。
-- CLI 可替換；切換 AI 不重建宇宙。
-- 程式碼與所有模組註解嚴格採用繁體中文。
+`main.py` 是固定執行入口；世界狀態保存在 `habitat.db`。後續演化沿用正式資料庫，首次部署則保留候選建立的資料庫。AI 程式必須能從資料庫恢復狀態，不能每次啟動重建世界。
 
----
+## 安裝與啟動
 
-## 2. 快速開始與使用方式
-
-### (1) 環境需求與依賴安裝
-
-專案需 Python 3.11+ 及 Node.js 18+。
+需要 Python 3.11+、Node.js，以及已安裝並登入的 CLI（agy、codex 或 claude）。
+目前世界執行隔離支援 macOS 的 `sandbox-exec`；原生隔離不可用時拒絕執行，Windows 與 Linux 尚不支援。
 
 ```bash
-# 1. 建立 Python 虛擬環境並安裝依賴
 uv venv .venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
-
-# 2. 前端依賴安裝與生產環境建構（已預先編譯至 dist/）
 cd observer/web
 npm install
 npm run build
 cd ../..
-```
-
-### (2) 一鍵啟動觀測系統
-
-執行下列指令即可啟動 Evo 核心服務：
-
-```bash
 .venv/bin/uvicorn observer.server.app:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-啟動後，系統會自動在安全沙盒中運作 `habitat/main.py` 物理進程，並同步啟動非同步 AI 認知節拍調度。
+瀏覽器開啟 http://127.0.0.1:8000 。服務啟動會開始認知調度；已有入口時也會啟動世界程序。
+控制 API 沒有登入驗證，服務僅供本機使用，請維持 loopback 綁定。
 
-### (3) 瀏覽器觀測與操作指南
+CLI 沿用主機現有登入。切換 CLI 或模型不重建世界；模型清單依適配器取得，不在文件固定列出易過期的模型名稱。設定會持久保存，CLI 不可用時回報錯誤。
 
-開啟瀏覽器造訪 **`http://127.0.0.1:8000`**：
+## 候選審查與部署
 
-1. **Phaser 2D 畫布**：
-   * 實時繪製自生宇宙的抽象幾何原語（質點、能量流、動態連線、數值標籤）。
-2. **模擬速度調節**：
-   * 點擊頂部按鈕切換 `1x`（正常）、`3x`（快速）、`MAX`（極速無延遲）或 `暫停`。
-3. **天外神諭介入（與 AI 對話）**：
-   * 於右側面板輸入文字訊號，系統會將其寫入信箱佇列，在下一個 AI Cognitive Heartbeat 作為天外神諭刺激注入 Context。
-4. **CLI 適配器與 Model 模型切換**：
-   * 下拉選單可在 `agy`（預設）、`codex`、`claude` 之間切換。
-   * 模型下拉選單隨所選 CLI 動態載入專屬支援模型（如 agy 的 `gemini-2.5-pro`、`gemini-2.5-flash`；codex 的 `o3-mini`、`gpt-4o`；claude 的 `claude-3-7-sonnet-latest` 等）。
-   * 若選擇之 CLI 尚未安裝，系統會明確阻斷切換且**絕不自動 fallback**。
-5. **唯讀程式碼檢視器**：
-   * 點擊按鈕可隨時在瀏覽器中查看由 AI 實時演化出的 `habitat/` 程式碼檔案。
+1. 外層在候選工作區呼叫 CLI。空白時產生世界，已有世界時修改程式。
+2. 生成提示要求 AI 自行 code review；Guardian 以隔離設定的 Ruff 檢查候選 Python 程式（E9、F），不接受候選的 Ruff 設定或 noqa 關閉檢查。
+3. 有套件需求時，由外層受控安裝核准 wheel。
+4. 候選通過原生沙箱冒煙測試及觀測資料檢查後，建立快照並部署。
+5. 正式世界由 Supervisor 管理；失敗時依生命週期控制復原。
 
-### (4) 測試與安全驗證
+目前沒有另一個獨立 AI 審查者。靜態檢查與短時間冒煙測試不能證明任意生成程式永遠正確，也不保證文明一定持續成長。
+快照保留最近三組；它們是復原用資料，不是完整世界歷史。
+
+## 沙箱與套件
+
+世界程序可讀寫 habitat 內的檔案，包含自行建立的 agents、skills 與隱藏目錄；必要的 Python 執行環境以唯讀方式開放。
+原生沙箱限制外部檔案、網路及子程序；Python audit hook 是額外防線。資源監控會處理失控程序。
+
+生成程式用的 CLI 在外層執行並沿用主機登入，**目前沒有套用世界程序的 OS 沙箱**。
+提示中的工作區限制不是 CLI 的作業系統安全保證。
+
+世界需要額外套件時，可建立 `sandbox-requirements.txt`，每行使用 `名稱==精確版本`。
+目前 allowlist 為 Pillow、Mido、MIDIUtil、NumPy、NetworkX。外層僅從 PyPI 安裝 binary wheel，不執行 source build、不遞迴安裝依賴；沒有符合平台的 wheel 時安裝失敗。
+套件存放於 `.evo-packages/`，正式世界仍離線執行。套件 bootstrap 需要控制器 Python 環境已安裝 pip。
+
+## 觀測資料協議
+
+世界自行建立 SQLite schema。前後端透過以下固定協議溝通；控制器不匯入 habitat 的 Python 模組，也不保留舊宇宙 schema 的相容分支。
+
+- `scene_primitives(id TEXT PRIMARY KEY, json_data TEXT, updated_at REAL)`：`current_scene` 記錄提供場景 JSON。
+- `world_state(key TEXT PRIMARY KEY, value TEXT)`：`metrics` 值為 JSON，可包含 `epoch`、`civilization_stage`。
+- `events(id TEXT PRIMARY KEY, type TEXT, message TEXT, importance INTEGER, timestamp REAL, entity_ids TEXT, epoch INTEGER)`：`entity_ids` 為 JSON ID 陣列。
+- `observer_signals(id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, message TEXT, target_entity_id TEXT, timestamp REAL, processed INTEGER DEFAULT 0, delivered_to_universe INTEGER DEFAULT 0)`：觀測者信箱。
+- 選用作品表 `creative_works(id TEXT PRIMARY KEY, creator_id TEXT, title TEXT, medium TEXT, mime_type TEXT, content BLOB, metadata_json TEXT, epoch INTEGER, created_at REAL)`：保存完整作品原文或原始位元組；世界自行實作寫入，不預装 helper。
+
+場景包含 `grid`、`entities`、`links`。實體提供 ID、位置、大小、顏色與 label，目前畫布支援圓形與矩形。
+世界須持續寫入場景、狀態與事件；若未記錄事件，時間線與大事記便沒有資料。重要程度至少 7，或指定階段轉換／歷史壓縮類型的事件列入大事記。
+
+完整生成要求見 [prompts/base.md](prompts/base.md)。世界自訂的 skill 不能覆蓋外層安全邊界。
+
+## 操作
+
+- 上方可切換 CLI、模型及 1x／3x／MAX。速度同時影響世界 tick 與認知節拍，不代表每個 tick 都會呼叫模型。
+- 暫停會取消 AI 工作、停止世界程序並斷開前端持續連線；恢復後重新連接。
+- 點選實體查看狀態與相關歷史，點空白回到全域。
+- 拖曳模式按鈕可再次點擊取消；按住空白鍵配合滑鼠左鍵可暫時平移，放開後恢復選取。
+- 觀測者訊號會寫入資料庫，交給世界／後續認知處理；送出成功不代表 AI 已經回應。
+- 作品 API 提供中繼資料與原始內容。HTML、SVG 等主動內容強制下載並套用限制標頭。
+
+## 開發期間維護外層程式
+
+可以持續修改外層控制器與觀測介面，不需要手動修改 `habitat/`。純顯示調整通常不影響世界；修改模型、提示、認知節拍、審查規則或資料協議，則可能改變後續演化方向或互動行為。
+
+沒有使用自動重載時，修改 Python 檔案通常不會立即影響已載入的服務。需要套用後端變更時，先暫停、停止服務，再修改並重新啟動；避免在世界運行中使用開發用自動重載。
+
+暫停或重啟會中斷演化，尚未完成的 AI 候選可能被取消。已寫入資料庫的狀態應由世界程式在啟動時讀回；尚未持久化的記憶體狀態可能遺失。這取決於生成程式的保存與恢復實作，不能保證每個候選都能完整延續。
+
+## 驗證
 
 ```bash
-# 1. 執行全套單元測試（包含 API、CLI、Guardian、隔離層、回滾與排程）
-.venv/bin/pytest -v tests/
-
-# 2. 執行啟動前主動安全越界滲透測試
-.venv/bin/python -m isolation.verifier
-
-# 3. 程式碼品質與風格檢查
 .venv/bin/ruff check .
+.venv/bin/pytest -q tests/
+cd observer/web
+npm test
+npm run build
 ```
 
----
+原生沙箱測試須在允許啟動 sandbox-exec 的 macOS 環境執行。測試使用暫存工作區與模擬 CLI，不依賴某個已生成的宇宙。
+測試通過不等於已完成真實模型端到端創世；登入、CLI 可用性及生成品質仍須實際執行確認。
 
-## 3. 技術棧
+## 目錄
 
-- **Backend / Core**：Python 3.11+、FastAPI、Pydantic、Psutil
-- **Universe Code**：Python（預裝通用科學/圖論基礎庫如 `numpy`、`networkx`，嚴格禁止動態 `pip install`）
-- **Database**：SQLite（唯一 DB：`habitat/habitat.db`，部署前自動快照備份）
-- **Frontend**：TypeScript + Phaser 3 + Vite（位於 `observer/web/`，編譯產物由 FastAPI 託管）
-- **即時通訊**：WebSocket（以 20 FPS 串流幾何原語與系統遙測數據）
-- **支援平台**：macOS / Windows
-- **邊界限制**：不使用 Docker / 不使用 Ollama
-- **CLI 適配**：預設 agy，支援 Codex、Claude 或其他 CLI Adapter
-
----
-
-## 4. 系統架構
-
-```text
-    ┌───────────────────────────┐
-    │  Observer (Web / Dialog)  │
-    └─────────────┬─────────────┘
-                  │ 觀察者訊號 / 神諭介入
-                  ▼
-         Context Manager ◄────────────────┐
-                  │                       │
-      Base Prompt + Skills + Context      │
-                  │                       │
-             CLI Adapter                  │
-        (agy / Codex / Claude)            │
-                  │                       │
-            Isolation 沙盒                 │
-                  │                       │
-          Candidate Staging               │
-         (habitat_staging/)               │
-                  │                       │
-   Tests (Ruff + Smoke) + Code Review     │
-                  │                       │
-           通過 ──┴── 失敗 (最多修復 3 輪)  │
-           │           │                  │
-           │           └─ 放棄 Candidate  │
-           ▼                              │
-      DB Snapshot 快照                    │
-           ▼                              │
-     Atomic Deploy (部署至 habitat/)      │
-           ▼                              │
-    Runtime Supervisor                    │
-           ▼                              │
-     habitat/main.py ◄────────────────────┘ (Tick 物理循環)
-           │
-           ▼ (持續運作)
-   habitat.db + 通用渲染原語
-           │
-           ▼
-     Observer Bridge (FastAPI / WebSocket)
-           │
-           ▼
-     Phaser (2D 畫布純原語渲染)
-```
-
-- **Cognitive Heartbeat（認知節拍）**：負責 AI「思考、反省、改寫代碼與推進世界設計」。
-- **Universe Tick（宇宙物理時鐘）**：負責讓已經部署的 `habitat/main.py` 連續推進宇宙運作與數據計算。
-
----
-
-## 5. 專案目錄架構
-
-```text
-evo/
-├─ core/
-│  ├─ heartbeat/     # 雙軌節拍調度 (Cognitive Heartbeat & Tick 控制)
-│  ├─ autonomous/    # 自主決策推進
-│  ├─ context/      # Context Manager 與神諭/觀察者訊息注入
-│  ├─ review/       # 外層靜態/冒煙檢查與 Guardian 守門員
-│  ├─ runtime/      # main.py 生命週期管理、Staging 與 Atomic 替換
-│  ├─ process/      # 子程序隔離執行
-│  ├─ resource/     # 資源監控與 Governor (CPU 25%, RAM 1GB)
-│  └─ lifecycle/    # 啟動、停止、快照與 Rollback
-├─ cli/
-│  ├─ adapters/     # CLI 適配抽象基底介面 (BaseCLIAdapter)
-│  ├─ agy/          # 預設 agy 適配層
-│  ├─ codex/        # Codex 適配層
-│  ├─ claude/       # Claude 適配層
-│  └─ factory.py    # 適配器工廠與動態切換（無 fallback）
-├─ skills/
-│  ├─ autonomous/   # 自主發展引導 SKILL.md
-│  ├─ review/       # 審查與重構標準 SKILL.md
-│  ├─ migration/    # DB 與代碼平滑遷移指引 SKILL.md
-│  └─ history/      # 歷史紀錄與摘要歸納 SKILL.md
-├─ prompts/
-│  └─ base.md       # 極簡核心 Prompt
-├─ isolation/
-│  ├─ common/       # Python sys.addaudithook 攔截與抽象沙盒
-│  ├─ windows/      # Windows AppContainer / LPAC 實作
-│  ├─ macos/        # macOS 沙盒與權限隔離實作
-│  └─ verifier.py   # 啟動前主動越界滲透測試器
-├─ observer/
-│  ├─ bridge/       # DB / Event 事件橋接器 (ObserverBridge)
-│  ├─ server/       # FastAPI WebSocket 與 REST 控制伺服器
-│  └─ web/          # Vite + TypeScript + Phaser 前端應用
-│     ├─ src/       # 前端原始碼 (CosmicScene.ts, main.ts, style.css)
-│     └─ dist/      # 生產環境編譯產物
-├─ habitat/         # AI 自生宇宙工作空間 (受沙盒保護)
-│  ├─ main.py       # 創世種子主程式
-│  └─ habitat.db    # 宇宙唯一資料庫
-├─ history/         # 歷史事件與壓縮摘要檔案
-├─ backups/         # DB 快照備份與 Stable 代碼歷史
-├─ config/          # 外層系統設定 (settings.py)
-├─ tests/           # 15 項自動化單元測試套件
-├─ pyproject.toml   # 專案依賴與工具設定
-└─ README.md        # 完整說明文件
-```
-
----
-
-## 6. 重要規則
-
-### 雙軌節拍（Heartbeat & Universe Tick）
-
-系統將「物理時鐘」與「AI 思考」解耦：
-
-1. **Universe Tick（`main.py` 物理時鐘）**：
-   - `1x`：1 秒 / tick
-   - `3x`：0.3 秒 / tick
-   - `MAX`：0.05 秒 / tick
-2. **Cognitive Heartbeat（AI 思考與改碼冷卻）**：
-   - `1x`：間隔 60 秒
-   - `3x`：間隔 15 秒
-   - `MAX`：上一輪結束後間隔 3 秒
-   - 冷卻從上一輪完成後開始計時，同一時間嚴格只跑一個 AI 回合。
-   - **休眠機制**：AI 可在輸出中聲明 `STATUS: SLEEP <N>`（維持現狀，靜默觀察 N 個週期），在此期間不重複呼叫 LLM，避免 Token 與 Quota 無謂消耗。
-
-### CLI 適配
-
-- 第一次啟動預設 `agy`。
-- 之後沿用上一次使用的 CLI。
-- 運行中可動態切換 CLI，下一個 Cognitive Heartbeat 生效。
-- 世界、DB、歷史與 Context 絕不重建。
-- CLI 不可用時顯示錯誤，嚴格**不自動 fallback**。
-
-### habitat 與執行環境
-
-- 固定入口：`habitat/main.py`。
-- 唯一 DB：`habitat/habitat.db`。
-- DB schema / table / 欄位由 AI 自己演化。
-- **依賴限制**：環境預裝常用基礎庫（Python 標準庫、`numpy`、`networkx` 等穩定計算庫），**嚴格禁止 AI 自行 `pip install` 或下載外部執行檔**。
-- 其他目錄與程式內容由 AI 自己產生。
-
-### 安全部署與 Code Review（Staging & Verification）
-
-```text
-Candidate (在 habitat_staging/ 產生)
-→ 1. 靜態分析 (ruff check 語法與無效匯入)
-→ 2. 冒煙測試 (沙盒背景試跑 5~10 秒無崩潰、DB 正常連線)
-→ 3. 邊界測試 (無越界檔案存取與非法 syscall)
-→ 4. AI Code Review
-→ 通過驗證 ──┬── 通過：快照 DB → Atomic 替換至 habitat/ → 重啟 main.py
-              └── 失敗：最多自我修復 3 輪，仍失敗則放棄 Candidate
-```
-
-- 仍失敗則放棄 Candidate，保留現有 Stable Version。
-- 部署或 DB migration 失敗時，透過 SQLite 快照與備份代碼進行一鍵完整 rollback。
-- Review 只改善實作品質與系統穩定性，不干預宇宙發展方向。
-
-### Resource Governor
-
-預設硬性限制：
-
-- CPU：約 25%
-- RAM：1 GB
-- 子程序：最多 4 個
-- `habitat`：最多 2 GB
-- AI 不能自行放寬限制。
-
-### Observer 與通用渲染原語協議
-
-Phaser **只負責顯示幾何原語，不預設 Person、Kingdom、Tree 等具體業務概念**。
-
-`habitat` 透過通用原語（Generic Scene Primitives）向前端推送視覺狀態：
-
-- **Grid / Canvas**：畫布邊界、背景色、網格維度。
-- **Entities**：位置 `(x, y)`、幾何形狀（`circle` / `rect` / `polygon`）、尺寸、顏色、透明度、文字標籤。
-- **Links**：實體間連線（起點、終點、顏色、樣式、線寬）。
-- **Particles / FX**：基本粒子效果（爆發、流動）。
-- **Metrics & Logs**：AI 自定義的世界數值面板與即時文字事件流。
-
-### 觀察者介入（Observer Signals）
-
-- 觀察者在 Web 介面輸入的訊息或提問，寫入 `habitat.db` 的信箱佇列。
-- Context Manager 在下一個 Cognitive Heartbeat 將該訊息包裝為「外在天外訊號 / 觀測者之聲」注入 Context，由 AI 自行決定如何理解或回應。
-
-### 歷史
-
-- 近期事件保留詳細內容。
-- 舊歷史定期由 AI 或 Context Manager 壓縮成摘要。
-- 重大歷史里程碑永久保留。
-- 嚴格控制 Context 體積，避免 Token 無限膨脹。
-
-### Isolation
-
-- AI 與子程序只能把 `habitat`（或測試時的 `habitat_staging`）當作可讀寫工作空間。
-- Windows：AppContainer / LPAC 方向。
-- macOS：進程權限降權 + Python 層級 Audit Hooks (`sys.addaudithook`) 雙重防護。
-- 啟動前執行越界測試；Isolation 失敗則拒絕啟動宇宙。
-- CLI 所需的最小系統／登入資源由 Evo 外層處理，不對 habitat 開放一般系統權限。
-
----
-
-## 7. AI Context
-
-採用分層架構：
-
-```text
-Short Base Prompt
-+ Context Manager (世界現狀、觀察者訊息、近期日誌)
-+ On-demand Skills (需要時動態加載)
-```
-
-Skills 包含：
-
-- `autonomous`：如何自主定義規則、推進世界迭代。
-- `review`：代碼自檢、重構原則與邊界規範。
-- `migration`：SQLite Schema 遷移與向前相容指南。
-- `history`：歷史壓縮與重大事件標記指引。
-
-以 agy 為主要驗證 CLI，但核心設計不綁死 agy。
-
----
-
-## 8. 驗收完成與驗證狀態
-
-- [x] **安全沙盒隔離驗證**：已通過 `isolation.verifier` 主動越界滲透測試，外部寫入與非法進程呼叫均被攔截。
-- [x] **CLI 適配器切換與無 Fallback 機制**：已通過單元測試，無效適配器精確報錯。
-- [x] **SQLite 快照與一鍵 Rollback**：已通過單元測試，候選版本異常時可完整無損還原代碼與資料庫。
-- [x] **Guardian 守門員冒煙測試**：已通過單元測試，精準阻截語法錯誤與崩潰代碼。
-- [x] **Phaser 通用渲染原語端到端整合**：前端已編譯整合完成，並支援 20 FPS WebSocket 串流展示。
-- [x] **全自動單元測試套件**：15/15 項測試全數 PASS。
+- `cli/`：CLI 適配器與取消控制。
+- `core/`：認知調度、上下文、資源、審查、快照與程序管理。
+- `isolation/`：原生隔離、驗證與套件 bootstrap。
+- `observer/`：觀測橋接、FastAPI 與前端。
+- `prompts/`、`skills/`：外層提供的生成指引。
+- `habitat/`：AI 自行生成的世界程式與資料。
+- `tests/`：控制器與通用協議測試。
