@@ -81,23 +81,19 @@ pnpm-debug.log*
 # 執行期日誌
 *.log
 
-# Staging 候選目錄（由排程器動態複製與替換）
-/habitat_staging/
-
 # 受控套件 bootstrap 快取（由 sandbox-requirements.txt 可重建）
 **/.evo-packages/
 **/.evo-packages.previous/
 **/.evo-packages-stage-*/
 **/.evo-packages-home-*/
 
-# 快照備份目錄（保留目錄本身結構，忽略動態快照內容）
-/backups/*
-!/backups/.gitkeep
+# 所有可重置的世界程式、記憶、設定、日誌與快照
+/runtime/
+# 舊版可能留下的執行期目錄；新版本不再讀寫這些路徑
+/habitat/
+/history/
+/backups/
 *.sqlite
-
-# 歷史事件歸納目錄（若有動態生成）
-/history/*
-!/history/.gitkeep
 
 # 原子部署臨時目錄
 .habitat.deploy-*

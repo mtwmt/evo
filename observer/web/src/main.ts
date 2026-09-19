@@ -149,15 +149,27 @@ function renderConnectionControls(): void {
     : pauseNeedsRetry ? "重試暫停" : isPaused ? "恢復" : "暫停";
 }
 
+function entityDisplayName(entity: any, fallbackId = ""): string {
+  const label = entity?.label;
+  if (typeof label === "string" && label.trim()) return label.trim();
+  return fallbackId || "未命名實體";
+}
+
+function selectedEntityDisplayName(): string {
+  if (!selectedEntityId) return "宇宙";
+  return entityDisplayName(lastEntityMap.get(selectedEntityId), selectedEntityId);
+}
+
 function setDialogueAvailability(entity: any): void {
+  const displayName = entityDisplayName(entity, entity?.id);
   isDialogueAvailable = entity?.type === "agent";
   if (isDialogueAvailable) {
-    dialogueTarget.textContent = entity.id;
+    dialogueTarget.textContent = displayName;
     dialogueStatus.textContent = "意識已連線";
     dialogueStatus.classList.add("locked");
-    oracleInput.placeholder = `對 ${entity.id} 說些什麼…`;
+    oracleInput.placeholder = `對 ${displayName} 說些什麼…`;
   } else if (entity) {
-    dialogueTarget.textContent = entity.id;
+    dialogueTarget.textContent = displayName;
     dialogueStatus.textContent = "非意識實體";
     dialogueStatus.classList.remove("locked");
     oracleInput.placeholder = "此實體沒有可對話的意識。";
@@ -378,14 +390,15 @@ game.events.once("cosmic-scene-ready", (scene: CosmicScene) => {
 
 function selectEntity(entityId: string) {
   const entity = lastEntityMap.get(entityId);
+  const displayName = entityDisplayName(entity, entityId);
   selectedEntityId = entityId;
   if (cosmicScene && entity) cosmicScene.selectedEntityId = entityId;
-  selectedEntityBadge.textContent = `鎖定目標：${entityId}`;
+  selectedEntityBadge.textContent = `鎖定目標：${displayName}`;
   selectedEntityBadge.classList.add("locked");
   if (entity) {
     updateMonologueDisplay(entity);
   } else {
-    speakerId.textContent = entityId;
+    speakerId.textContent = displayName;
     speakerState.textContent = "歷史紀錄";
     speakerThought.textContent = "「此實體目前不在畫布中；正在讀取已留下的事蹟。」";
   }
@@ -429,14 +442,15 @@ window.addEventListener("blur", () => setTemporaryPan(false));
 
 function updateMonologueDisplay(entity: any) {
   if (!entity) return;
-  speakerId.textContent = entity.id;
+  const displayName = entityDisplayName(entity, entity.id);
+  speakerId.textContent = displayName;
   speakerState.textContent = entity.state || "感應中";
   speakerThought.textContent = `「${entity.monologue || "意識正在虛空中凝聚..."}」`;
   if (entity.color) {
     speakerIndicator.style.backgroundColor = entity.color;
     speakerIndicator.style.boxShadow = `0 0 8px ${entity.color}`;
   }
-  oracleInput.placeholder = `對 ${entity.id} 說些什麼…`;
+  oracleInput.placeholder = `對 ${displayName} 說些什麼…`;
 }
 
 function firstPublicText(metrics: any, keys: string[]): string {
@@ -467,8 +481,9 @@ function updateInteractions(scene: any) {
   const links = selectedEntityId
     ? allLinks.filter((link: any) => link.from === selectedEntityId || link.to === selectedEntityId)
     : allLinks;
+  const selectedName = selectedEntityDisplayName();
   interactionCount.textContent = selectedEntityId
-    ? `${selectedEntityId} · ${links.length} 條`
+    ? `${selectedName} · ${links.length} 條`
     : `全域 · ${links.length} 條`;
   interactionList.innerHTML = "";
 
@@ -476,7 +491,7 @@ function updateInteractions(scene: any) {
     const empty = document.createElement("li");
     empty.className = "empty-interaction";
     empty.textContent = selectedEntityId
-      ? `${selectedEntityId} 此刻尚未形成可觀測的連結`
+      ? `${selectedName} 此刻尚未形成可觀測的連結`
       : "此刻尚未形成可觀測的連結";
     interactionList.appendChild(empty);
     return;
@@ -488,7 +503,7 @@ function updateInteractions(scene: any) {
     .forEach((link: any) => {
       const item = document.createElement("li");
       const pair = document.createElement("strong");
-      pair.textContent = `${link.from} ↔ ${link.to}`;
+      pair.textContent = `${entityDisplayName(lastEntityMap.get(link.from), link.from)} ↔ ${entityDisplayName(lastEntityMap.get(link.to), link.to)}`;
       const detail = document.createElement("span");
       detail.textContent = "能量連結";
       item.append(pair, detail);
@@ -509,8 +524,22 @@ function historyTimeLabel(event: any): string {
     });
 }
 
-function appendHistoryMessage(container: HTMLElement, event: any): void {
-  container.append(document.createTextNode(`[${event.type}] `));
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  birth: "誕生",
+  chronicle: "紀元編年",
+  creation: "創作",
+  death: "消逝",
+  epoch_change: "紀元轉換",
+  epoch_transition: "紀元轉換",
+  evolution: "演化",
+  genesis: "創世",
+};
+
+function appendHistoryMessage(container: HTMLElement, event: any, milestone = false): void {
+  if (!milestone) {
+    const type = String(event?.type || "event");
+    container.append(document.createTextNode(`[${EVENT_TYPE_LABELS[type] || type}] `));
+  }
   const entityIds = Array.isArray(event.entity_ids)
     ? event.entity_ids.filter((id: unknown) => typeof id === "string" && id)
     : [];
@@ -522,7 +551,7 @@ function appendHistoryMessage(container: HTMLElement, event: any): void {
       const entityLink = document.createElement("button");
       entityLink.type = "button";
       entityLink.className = "history-inline-node";
-      entityLink.textContent = part;
+      entityLink.textContent = entityDisplayName(lastEntityMap.get(part), part);
       entityLink.addEventListener("click", () => selectEntity(part));
       container.appendChild(entityLink);
     } else {
@@ -538,7 +567,7 @@ function renderHistoryItem(event: any, milestone = false): HTMLElement {
   const timeElement = document.createElement("time");
   timeElement.textContent = historyTimeLabel(event);
   const message = document.createElement("span");
-  appendHistoryMessage(message, event);
+  appendHistoryMessage(message, event, milestone);
   item.append(timeElement, message);
   return item;
 }
@@ -550,7 +579,7 @@ function renderEntityBiography(entity: any, events: any[]): void {
   }
 
   biographyPanel.hidden = false;
-  biographyName.textContent = selectedEntityId;
+  biographyName.textContent = entityDisplayName(entity, selectedEntityId);
   const kind = [entity?.role, entity?.resource_type, entity?.type]
     .filter((value) => typeof value === "string" && value)
     .join(" · ");
@@ -621,7 +650,7 @@ function renderDialogue(events: any[]): void {
   if (dialogueEvents.length === 0) {
     const empty = document.createElement("p");
     empty.className = "dialogue-empty";
-    empty.textContent = `向 ${selectedEntityId} 傳送訊息，開始對話。`;
+    empty.textContent = `向 ${selectedEntityDisplayName()} 傳送訊息，開始對話。`;
     dialogueLog.appendChild(empty);
     return;
   }
@@ -630,7 +659,7 @@ function renderDialogue(events: any[]): void {
     const line = document.createElement("p");
     line.className = `dialogue-line ${event.type === "dialogue_response" ? "response" : "request"}`;
     line.textContent = event.type === "dialogue_response"
-      ? `${selectedEntityId}：${String(event.message).replace(/^\[[^\]]+\] 回應：/, "")}`
+      ? `${selectedEntityDisplayName()}：${String(event.message).replace(/^\[[^\]]+\] 回應：/, "")}`
       : `你：${String(event.message).replace(/^\[[^\]]+\] 收到觀測者訊號：/, "")}`;
     dialogueLog.appendChild(line);
   });
@@ -694,7 +723,7 @@ function initWebSocket() {
         data.scene.monologues.forEach((m: any) => {
           const li = document.createElement("li");
           const id = document.createElement("strong");
-          id.textContent = String(m.id);
+          id.textContent = entityDisplayName(lastEntityMap.get(m.id), String(m.id));
           const state = document.createElement("span");
           state.className = "state";
           state.textContent = ` [${m.state}] `;
@@ -786,7 +815,7 @@ async function fetchHistory() {
       if (requestedEntityId !== selectedEntityId) return;
       eventsList.innerHTML = "";
       milestonesList.innerHTML = "";
-      historyScope.textContent = selectedEntityId ? `${selectedEntityId} 的歷程` : "全域事件";
+      historyScope.textContent = selectedEntityId ? `${selectedEntityDisplayName()} 的歷程` : "全域事件";
       const stage = typeof data.civilization_stage === "string" ? data.civilization_stage.trim() : "";
       timelineMeta.textContent = `目前紀元 ${Number(data.current_epoch) || 0}${stage ? ` · ${stage}` : ""}`;
       if (Array.isArray(data.milestones) && data.milestones.length > 0) {

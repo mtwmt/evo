@@ -31,31 +31,9 @@ class StubContext:
     def acknowledge_observer_signals(self, ids):
         self.events.append(("ack", list(ids)))
 
-def test_staging_workspace_mirroring(tmp_path: Path):
-    """驗證每次 AI 修改前，staging 目錄皆能完整鏡像複製當前 habitat 代碼。"""
-    habitat = tmp_path / "habitat"
-    staging = tmp_path / "staging"
-    habitat.mkdir()
-    (habitat / "main.py").write_text("print('stable')", encoding="utf-8")
-
-    supervisor = RuntimeSupervisor(habitat_dir=habitat)
-    scheduler = CognitiveScheduler(
-        supervisor=supervisor,
-        context_manager=ContextManager(db_path=habitat / "habitat.db"),
-        guardian=Guardian(),
-        lifecycle_manager=LifecycleManager(habitat_dir=habitat, backups_dir=tmp_path / "backups"),
-        staging_dir=staging,
-    )
-
-    scheduler.prepare_staging_workspace()
-    assert (staging / "main.py").exists()
-    assert (staging / "main.py").read_text(encoding="utf-8") == "print('stable')"
-
-
 def test_blank_habitat_is_created_reviewed_and_deployed(tmp_path: Path, monkeypatch):
-    """首次創世可從不存在的 habitat 開始，候選仍須先通過 Guardian。"""
+    """首次創世直接寫入 habitat，並在 Guardian 通過後才啟動。"""
     habitat = tmp_path / "habitat"
-    staging = tmp_path / "staging"
     reviewed: list[Path] = []
     lifecycle_events: list[str] = []
 
@@ -87,7 +65,6 @@ def test_blank_habitat_is_created_reviewed_and_deployed(tmp_path: Path, monkeypa
             habitat_dir=habitat,
             backups_dir=tmp_path / "backups",
         ),
-        staging_dir=staging,
     )
     monkeypatch.setattr(scheduler_module, "HISTORY_DIR", tmp_path / "history")
     monkeypatch.setattr(scheduler_module.config, "paused", False)
@@ -96,7 +73,7 @@ def test_blank_habitat_is_created_reviewed_and_deployed(tmp_path: Path, monkeypa
     result = scheduler.execute_cognitive_turn()
 
     assert result == {"status": "deployed", "rounds": 1}
-    assert reviewed == [staging]
+    assert reviewed == [habitat]
     assert (habitat / "main.py").read_text(encoding="utf-8") == "from world import WORLD\n"
     assert (habitat / "world.py").read_text(encoding="utf-8") == "WORLD = 'self-authored'\n"
     assert lifecycle_events == ["stop", "start"]
@@ -105,7 +82,6 @@ def test_blank_habitat_is_created_reviewed_and_deployed(tmp_path: Path, monkeypa
 def test_ai_sleep_command_parsing(tmp_path: Path, monkeypatch):
     """驗證當 AI 回覆 STATUS: SLEEP <N> 時，排程器能進入靜默休眠狀態節省 Quota。"""
     habitat = tmp_path / "habitat"
-    staging = tmp_path / "staging"
     habitat.mkdir()
 
     supervisor = RuntimeSupervisor(habitat_dir=habitat)
@@ -114,7 +90,6 @@ def test_ai_sleep_command_parsing(tmp_path: Path, monkeypatch):
         context_manager=ContextManager(db_path=habitat / "habitat.db"),
         guardian=Guardian(),
         lifecycle_manager=LifecycleManager(habitat_dir=habitat, backups_dir=tmp_path / "backups"),
-        staging_dir=staging,
     )
 
     monkeypatch.setattr(scheduler_module.config, "paused", False)
@@ -140,7 +115,6 @@ def build_scheduler(tmp_path, context, guardian=None):
             habitat_dir=habitat,
             backups_dir=tmp_path / "backups",
         ),
-        staging_dir=tmp_path / "staging",
     )
     return scheduler, supervisor, habitat
 
@@ -150,7 +124,9 @@ def test_abandoned_turn_does_not_kill_later_scheduling(tmp_path, monkeypatch):
     monkeypatch.setattr(scheduler_module, "HISTORY_DIR", tmp_path / "history")
     monkeypatch.setattr(scheduler_module.config, "paused", False)
     context = StubContext(needs_evolution=True, signal_ids=[7])
-    scheduler, _, _ = build_scheduler(tmp_path, context)
+    scheduler, supervisor, _ = build_scheduler(tmp_path, context)
+    supervisor.stop = lambda: None
+    supervisor.start = lambda **kwargs: None
 
     class NoChangeAdapter:
         calls = 0
@@ -179,7 +155,7 @@ def test_module_only_code_change_is_accepted(tmp_path, monkeypatch):
     """可見演化可由新模組完成，無須修改入口 main.py。"""
     monkeypatch.setattr(scheduler_module, "HISTORY_DIR", tmp_path / "history")
     monkeypatch.setattr(scheduler_module.config, "paused", False)
-    scheduler, _, habitat = build_scheduler(tmp_path, StubContext(needs_evolution=True))
+    scheduler, supervisor, habitat = build_scheduler(tmp_path, StubContext(needs_evolution=True))
     (habitat / ".habitat-config").write_text("stable", encoding="utf-8")
     verified = []
 
@@ -200,17 +176,16 @@ def test_module_only_code_change_is_accepted(tmp_path, monkeypatch):
 
     scheduler.guardian = PassGuardian()
     monkeypatch.setattr(scheduler_module, "get_adapter", ModuleAdapter)
-    monkeypatch.setattr(
-        scheduler,
-        "_deploy_candidate",
-        lambda generation, rounds, signal_ids: {"status": "deployed", "rounds": rounds},
-    )
+    supervisor.stop = lambda: None
+    supervisor.start = lambda **kwargs: None
 
     result = scheduler.execute_cognitive_turn()
 
     assert result == {"status": "deployed", "rounds": 1}
     assert len(verified) == 1
-    assert (tmp_path / "staging" / ".habitat-config").read_text(encoding="utf-8") == "stable"
+    assert verified == [habitat]
+    assert (habitat / ".habitat-config").read_text(encoding="utf-8") == "stable"
+    assert (habitat / "plugins" / "growth.py").is_file()
     assert (habitat / "main.py").read_text(encoding="utf-8") == "print('stable')"
 
 
@@ -218,7 +193,9 @@ def test_candidate_symlink_is_rejected_without_reading_target(tmp_path, monkeypa
     """候選連結會被拒絕，且不會將連結目標內容納入讀取。"""
     monkeypatch.setattr(scheduler_module, "HISTORY_DIR", tmp_path / "history")
     monkeypatch.setattr(scheduler_module.config, "paused", False)
-    scheduler, _, _ = build_scheduler(tmp_path, StubContext(needs_evolution=True))
+    scheduler, supervisor, _ = build_scheduler(tmp_path, StubContext(needs_evolution=True))
+    supervisor.stop = lambda: None
+    supervisor.start = lambda **kwargs: None
     outside = tmp_path / "outside-secret"
     outside.write_text("must not be read", encoding="utf-8")
     guardian_calls = []
@@ -252,8 +229,10 @@ def test_cli_exception_cannot_verify_or_deploy_partial_changes(tmp_path, monkeyp
     monkeypatch.setattr(scheduler_module, "HISTORY_DIR", tmp_path / "history")
     monkeypatch.setattr(scheduler_module.config, "paused", False)
     context = StubContext(signal_ids=[9])
-    scheduler, _, _ = build_scheduler(tmp_path, context)
-    candidate = tmp_path / "staging" / "main.py"
+    scheduler, supervisor, habitat = build_scheduler(tmp_path, context)
+    candidate = habitat / "main.py"
+    supervisor.stop = lambda: None
+    supervisor.start = lambda **kwargs: None
 
     class FailingAdapter:
         def is_available(self):
@@ -392,7 +371,6 @@ def test_failed_first_genesis_rolls_back_to_blank_without_restart(tmp_path, monk
             habitat_dir=habitat,
             backups_dir=tmp_path / "backups",
         ),
-        staging_dir=tmp_path / "staging",
     )
     starts = []
     scheduler.supervisor.stop = lambda: None
@@ -457,7 +435,9 @@ def test_sleep_cycles_update_monotonic_cooldown_and_ack(tmp_path, monkeypatch):
     monkeypatch.setattr(scheduler_module, "HISTORY_DIR", tmp_path / "history")
     monkeypatch.setattr(scheduler_module.config, "paused", False)
     context = StubContext(needs_evolution=False, signal_ids=[31])
-    scheduler, _, _ = build_scheduler(tmp_path, context)
+    scheduler, supervisor, _ = build_scheduler(tmp_path, context)
+    supervisor.stop = lambda: None
+    supervisor.start = lambda **kwargs: None
     now = [100.0]
     monkeypatch.setattr(scheduler_module.time, "monotonic", lambda: now[0])
 
@@ -611,7 +591,6 @@ def test_resume_blank_habitat_enables_external_genesis_without_starting_world(
             habitat_dir=habitat,
             backups_dir=tmp_path / "backups",
         ),
-        staging_dir=tmp_path / "staging",
     )
     scheduler._pause_requested = True
     starts = []

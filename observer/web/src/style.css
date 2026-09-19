@@ -348,6 +348,7 @@ body.sidebar-resizing {
 }
 
 .cosmic-reflection-panel {
+  flex: 0 0 auto;
   position: relative;
   overflow: hidden;
   border-color: rgba(153, 51, 255, 0.42);

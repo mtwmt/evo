@@ -24,7 +24,7 @@ class BaseSandbox(ABC):
         }
         env = {k: v for k, v in os.environ.items() if k in allowed_vars}
 
-        # 將可寫的家目錄與暫存目錄限制在候選工作區內。
+        # 將可寫的家目錄與暫存目錄限制在 habitat 內。
         env["HOME"] = str(self.workspace_path)
         env["TMPDIR"] = str(self.workspace_path)
 

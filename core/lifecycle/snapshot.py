@@ -19,7 +19,7 @@ class LifecycleManager:
         self.backups_dir = Path(backups_dir).resolve()
 
     def create_snapshot(self) -> tuple[Path | None, Path]:
-        """於候選版本部署前，同時建立資料庫與程式碼快照。"""
+        """在 AI 直接修改 habitat 前，同時建立資料庫與程式碼快照。"""
         timestamp = time.time_ns()
         self.backups_dir.mkdir(parents=True, exist_ok=True)
 
@@ -136,48 +136,20 @@ class LifecycleManager:
                 else:
                     path.unlink()
 
-    def atomic_deploy_staging(self, staging_dir: Path) -> None:
-        """以目錄交換部署候選程式碼，保留正式世界資料庫。"""
-        staging_dir = Path(staging_dir).resolve()
-        if not staging_dir.is_dir():
-            raise FileNotFoundError(f"找不到候選目錄：'{staging_dir}'")
-
-        self.habitat_dir.parent.mkdir(parents=True, exist_ok=True)
-        deploy_dir = self.habitat_dir.parent / f".{self.habitat_dir.name}.deploy-{uuid.uuid4().hex}"
-        previous_dir = self.habitat_dir.parent / f".{self.habitat_dir.name}.previous-{uuid.uuid4().hex}"
-        deploy_dir.mkdir()
-
-        try:
-            # 候選僅可替換程式碼；世界 DB 與 WAL 檔須保留在正式版本。
-            for item in staging_dir.iterdir():
-                if self.is_database_file(item.name):
-                    continue
-                target = deploy_dir / item.name
-                if item.is_dir():
-                    self._copy_tree(item, target)
-                elif item.is_file():
-                    self._copy_file(item, target)
-
-            db_file = self.habitat_dir / "habitat.db"
-            if db_file.exists():
-                self._sqlite_backup(db_file, deploy_dir / "habitat.db")
-            elif (staging_dir / "habitat.db").exists():
-                # 首次創世保留已驗證的初始資料；已有世界則只沿用正式 DB。
-                self._sqlite_backup(staging_dir / "habitat.db", deploy_dir / "habitat.db")
-
-            if self.habitat_dir.exists():
-                self.habitat_dir.replace(previous_dir)
-
-            deploy_dir.replace(self.habitat_dir)
-        except Exception:
-            if previous_dir.exists() and not self.habitat_dir.exists():
-                previous_dir.replace(self.habitat_dir)
-            raise
-        finally:
-            if deploy_dir.exists():
-                shutil.rmtree(deploy_dir)
-            if previous_dir.exists():
-                shutil.rmtree(previous_dir)
+    def restore_database_snapshot(self, db_snapshot: Path | None) -> None:
+        """清除候選執行產物，並在既有世界中恢復回合開始前的資料庫。"""
+        self.habitat_dir.mkdir(parents=True, exist_ok=True)
+        db_file = self.habitat_dir / "habitat.db"
+        for candidate in (
+            db_file,
+            Path(f"{db_file}-wal"),
+            Path(f"{db_file}-shm"),
+            Path(f"{db_file}-journal"),
+        ):
+            if candidate.exists() or candidate.is_symlink():
+                candidate.unlink()
+        if db_snapshot is not None:
+            self._sqlite_backup(Path(db_snapshot), db_file)
 
     def rollback(self, db_snapshot: Path | None, code_snapshot: Path) -> None:
         """於 runtime 已停止時，以快照完整還原程式碼與資料庫。"""

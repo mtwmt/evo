@@ -285,7 +285,7 @@ class BaseCLIAdapter(ABC):
 
         參數：
             prompt: 完整組裝之提示詞。
-            workspace_path: 供 AI 讀寫修改的候選工作區目錄。
+            workspace_path: 供 AI 直接讀寫修改的 habitat 目錄。
             context: 額外環境資訊字典。
 
         回傳：

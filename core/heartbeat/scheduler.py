@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import os
 import re
-import shutil
 import stat
 import threading
 import time
@@ -12,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from cli.factory import get_adapter
-from config.settings import HABITAT_STAGING_DIR, HISTORY_DIR, config
+from config.settings import HISTORY_DIR, config
 from core.context.manager import ContextManager
 from core.lifecycle.snapshot import LifecycleManager
 from core.review.guardian import Guardian
@@ -125,13 +124,12 @@ class CognitiveScheduler:
         context_manager: ContextManager | None = None,
         guardian: Guardian | None = None,
         lifecycle_manager: LifecycleManager | None = None,
-        staging_dir: Path = HABITAT_STAGING_DIR,
     ):
         self.supervisor = supervisor
         self.context_manager = context_manager or ContextManager()
         self.guardian = guardian or Guardian()
         self.lifecycle_manager = lifecycle_manager or LifecycleManager()
-        self.staging_dir = Path(staging_dir).resolve()
+        self.workspace_dir = self.supervisor.habitat_dir
 
         self.is_running = False
         self.sleep_cycles_remaining = 0
@@ -185,28 +183,6 @@ class CognitiveScheduler:
             # 記錄失敗不能阻斷世界本身的演化回合。
             pass
 
-    def prepare_staging_workspace(self) -> None:
-        """鏡像穩定 habitat，拒絕把符號連結追蹤到工作區外。"""
-        if self.staging_dir.exists():
-            shutil.rmtree(self.staging_dir)
-        self.staging_dir.mkdir(parents=True, exist_ok=True)
-
-        source_dir = self.supervisor.habitat_dir
-        if not source_dir.exists():
-            return
-        _code_tree_fingerprint(source_dir, self.lifecycle_manager)
-        for item in source_dir.iterdir():
-            if self.lifecycle_manager.is_database_file(item.name):
-                continue
-            target = self.staging_dir / item.name
-            if item.is_dir():
-                self.lifecycle_manager.copy_code_tree(item, target)
-            elif item.is_file():
-                self.lifecycle_manager.copy_code_file(item, target)
-        database = source_dir / "habitat.db"
-        if database.exists():
-            self.lifecycle_manager.copy_database_backup(database, self.staging_dir / "habitat.db")
-
     def _turn_was_cancelled(self, generation: int) -> bool:
         with self._state_lock:
             return self._turn_was_cancelled_locked(generation)
@@ -248,46 +224,42 @@ class CognitiveScheduler:
                 return True, f"訊息確認失敗，訊息仍可重試：{exc}"
             return True, None
 
-    def _deploy_candidate(self, generation: int, rounds: int, signal_ids: list[int]) -> dict:
+    def _rollback_direct_candidate(
+        self,
+        db_snapshot: Path | None,
+        code_snapshot: Path,
+    ) -> None:
+        """停止候選並把直接修改的 habitat 還原成回合開始前的穩定版本。"""
+        with self._lifecycle_lock:
+            self.supervisor.stop()
+            self.lifecycle_manager.rollback(db_snapshot, code_snapshot)
+            self._restart_stable_if_allowed()
+
+    def _activate_direct_candidate(
+        self,
+        generation: int,
+        rounds: int,
+        signal_ids: list[int],
+        db_snapshot: Path | None,
+        code_snapshot: Path,
+    ) -> dict:
+        """驗證完成後才啟動直接寫在 habitat 的候選程式。"""
         with self._lifecycle_lock:
             if self._turn_was_cancelled(generation):
-                return {"status": "cancelled", "reason": "發布前收到暫停或關閉要求"}
-
-            self.supervisor.stop()
-            if self._turn_was_cancelled(generation):
-                self._restart_stable_if_allowed()
-                return {"status": "cancelled", "reason": "停止穩定版本後收到暫停或關閉要求"}
-
+                self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                return {"status": "cancelled", "reason": "啟動前收到暫停或關閉要求"}
             try:
-                db_snapshot, code_snapshot = self.lifecycle_manager.create_snapshot()
-            except Exception as exc:
-                try:
-                    self._restart_stable_if_allowed()
-                except Exception as restart_exc:
-                    return {
-                        "status": "error",
-                        "error": f"建立快照失敗：{exc}；穩定版本重啟失敗：{restart_exc}",
-                    }
-                return {"status": "error", "error": f"建立快照失敗：{exc}"}
-
-            if self._turn_was_cancelled(generation):
-                self._restart_stable_if_allowed()
-                return {"status": "cancelled", "reason": "快照完成後收到暫停或關閉要求"}
-
-            try:
-                self.lifecycle_manager.atomic_deploy_staging(self.staging_dir)
-                if self._turn_was_cancelled(generation):
-                    self.lifecycle_manager.rollback(db_snapshot, code_snapshot)
-                    self._restart_stable_if_allowed()
-                    return {"status": "cancelled", "reason": "候選啟動前收到暫停或關閉要求"}
+                # 既有世界的冒煙測試可能寫入正式 DB；啟動前恢復原狀態。
+                # 首次創世沒有 DB 快照，保留驗證時建立的初始世界資料。
+                if db_snapshot is not None:
+                    self.lifecycle_manager.restore_database_snapshot(db_snapshot)
                 self.supervisor.start(tick_interval=config.universe_tick_interval)
                 if self._turn_was_cancelled(generation):
                     self.supervisor.stop()
                     self.lifecycle_manager.rollback(db_snapshot, code_snapshot)
                     self._restart_stable_if_allowed()
                     return {"status": "cancelled", "reason": "候選啟動時收到暫停或關閉要求"}
-            except Exception as deploy_error:
-                # 失敗的候選進程先停止，確保回滾時沒有 SQLite 寫入者。
+            except Exception as activation_error:
                 self.supervisor.stop()
                 try:
                     self.lifecycle_manager.rollback(db_snapshot, code_snapshot)
@@ -295,9 +267,9 @@ class CognitiveScheduler:
                 except Exception as rollback_error:
                     return {
                         "status": "rollback_error",
-                        "error": f"部署失敗：{deploy_error}；回滾或穩定版本啟動失敗：{rollback_error}",
+                        "error": f"啟動失敗：{activation_error}；回滾或穩定版本啟動失敗：{rollback_error}",
                     }
-                return {"status": "rollback", "error": str(deploy_error)}
+                return {"status": "rollback", "error": str(activation_error)}
 
             acknowledged, acknowledgement_warning = self._acknowledge_signals_if_current(
                 generation, signal_ids
@@ -341,6 +313,9 @@ class CognitiveScheduler:
             self._active_adapter = None
 
         result: dict = {"status": "error", "error": "回合尚未完成"}
+        db_snapshot: Path | None = None
+        code_snapshot: Path | None = None
+        direct_edit_started = False
         try:
             adapter = get_adapter()
             if not adapter.is_available():
@@ -350,8 +325,17 @@ class CognitiveScheduler:
                 }
                 return result
 
-            self.prepare_staging_workspace()
-            original_code = _code_tree_fingerprint(self.staging_dir, self.lifecycle_manager)
+            # AI 直接修改 habitat；先停掉正式程序並建立可回復快照。
+            with self._lifecycle_lock:
+                self.supervisor.stop()
+                try:
+                    db_snapshot, code_snapshot = self.lifecycle_manager.create_snapshot()
+                except Exception:
+                    self._restart_stable_if_allowed()
+                    raise
+                self.workspace_dir.mkdir(parents=True, exist_ok=True)
+            direct_edit_started = True
+            original_code = _code_tree_fingerprint(self.workspace_dir, self.lifecycle_manager)
             visible_world = self.context_manager.describe_visible_world()
             needs_visible_evolution = bool(visible_world.get("needs_evolution", True))
 
@@ -365,6 +349,9 @@ class CognitiveScheduler:
             for round_num in range(1, max_repair_rounds + 1):
                 if self._turn_was_cancelled(generation):
                     result = {"status": "cancelled", "reason": "執行認知回合時收到暫停或關閉要求"}
+                    assert code_snapshot is not None
+                    self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                    direct_edit_started = False
                     return result
 
                 repair_note = ""
@@ -381,6 +368,9 @@ class CognitiveScheduler:
                             "status": "cancelled",
                             "reason": "CLI 啟動前收到暫停或關閉要求",
                         }
+                        assert code_snapshot is not None
+                        self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                        direct_edit_started = False
                         return result
                     self._active_cli_done.clear()
                     self._active_adapter = adapter
@@ -388,7 +378,7 @@ class CognitiveScheduler:
                 try:
                     ai_output = adapter.execute_turn(
                         prompt=current_prompt,
-                        workspace_path=self.staging_dir,
+                        workspace_path=self.workspace_dir,
                         context={
                             "cancel_event": turn_cancelled,
                             "cancel_lock": self._state_lock,
@@ -406,7 +396,7 @@ class CognitiveScheduler:
                 code_scan_failed = False
                 try:
                     changed_code = (
-                        _code_tree_fingerprint(self.staging_dir, self.lifecycle_manager)
+                        _code_tree_fingerprint(self.workspace_dir, self.lifecycle_manager)
                         != original_code
                     )
                 except (OSError, ValueError) as exc:
@@ -421,10 +411,15 @@ class CognitiveScheduler:
                         "status": "cancelled",
                         "reason": "CLI 執行期間收到暫停或關閉要求",
                     }
+                    assert code_snapshot is not None
+                    self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                    direct_edit_started = False
                     return result
                 if not cli_succeeded:
+                    self.lifecycle_manager.restore_database_snapshot(db_snapshot)
                     continue
                 if code_scan_failed:
+                    self.lifecycle_manager.restore_database_snapshot(db_snapshot)
                     continue
 
                 sleep_match = re.search(r"STATUS:\s*SLEEP\s+(\d+)", ai_output, re.IGNORECASE)
@@ -437,16 +432,20 @@ class CognitiveScheduler:
                                     "status": "cancelled",
                                     "reason": "休眠確認訊息前收到暫停或關閉要求",
                                 }
+                                assert code_snapshot is not None
+                                self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                                direct_edit_started = False
                                 return result
                             self.sleep_cycles_remaining = requested_cycles
                             self.last_heartbeat_time = time.monotonic()
-                            try:
-                                self.context_manager.acknowledge_observer_signals(signal_ids)
-                                acknowledgement_warning = None
-                            except Exception as exc:
-                                acknowledgement_warning = (
-                                    f"訊息確認失敗，訊息仍可重試：{exc}"
-                                )
+                        assert code_snapshot is not None
+                        self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                        direct_edit_started = False
+                        try:
+                            self.context_manager.acknowledge_observer_signals(signal_ids)
+                            acknowledgement_warning = None
+                        except Exception as exc:
+                            acknowledgement_warning = f"訊息確認失敗，訊息仍可重試：{exc}"
                         result = {
                             "status": "ai_sleep_requested",
                             "cycles": self.sleep_cycles_remaining,
@@ -465,13 +464,15 @@ class CognitiveScheduler:
 
                 self._publish_turn_status(generation, {"status": "verifying", "round": round_num})
                 try:
-                    verification = self.guardian.verify(self.staging_dir)
+                    verification = self.guardian.verify(self.workspace_dir)
                 except Exception as exc:
                     last_failure_reason = f"候選驗證器執行異常：{exc}"
+                    self.lifecycle_manager.restore_database_snapshot(db_snapshot)
                     continue
                 if verification.passed:
                     turn_success = True
                     break
+                self.lifecycle_manager.restore_database_snapshot(db_snapshot)
                 last_failure_reason = (
                     f"候選版本在 '{verification.step}' 步驟未通過檢驗：\n"
                     f"{verification.error_message}\n請修復候選程式碼中的問題。"
@@ -479,7 +480,15 @@ class CognitiveScheduler:
 
             if turn_success:
                 self._publish_turn_status(generation, {"status": "deploying", "round": round_num})
-                result = self._deploy_candidate(generation, round_num, signal_ids)
+                assert code_snapshot is not None
+                result = self._activate_direct_candidate(
+                    generation,
+                    round_num,
+                    signal_ids,
+                    db_snapshot,
+                    code_snapshot,
+                )
+                direct_edit_started = False
             else:
                 result = {
                     "status": "abandoned",
@@ -488,9 +497,21 @@ class CognitiveScheduler:
                         f"{last_failure_reason}"
                     ),
                 }
+                assert code_snapshot is not None
+                self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                direct_edit_started = False
             return result
         except Exception as exc:
             result = {"status": "error", "error": str(exc)}
+            if direct_edit_started and code_snapshot is not None:
+                try:
+                    self._rollback_direct_candidate(db_snapshot, code_snapshot)
+                    direct_edit_started = False
+                except Exception as rollback_exc:
+                    result = {
+                        "status": "rollback_error",
+                        "error": f"回合失敗：{exc}；回滾失敗：{rollback_exc}",
+                    }
             return result
         finally:
             with self._state_lock:

@@ -5,7 +5,34 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock
 
+import pytest
+
 import config.settings as settings
+
+
+def test_resettable_paths_share_runtime_root():
+    """世界、歷史與快照集中在同一個可完整 reset 的目錄。"""
+    assert settings.RUNTIME_DIR == settings.PROJECT_ROOT / "runtime"
+    assert settings.HABITAT_DIR == settings.RUNTIME_DIR / "habitat"
+    assert settings.HISTORY_DIR == settings.RUNTIME_DIR / "history"
+    assert settings.BACKUPS_DIR == settings.RUNTIME_DIR / "backups"
+    assert settings.RUNTIME_CONFIG_PATH == settings.HISTORY_DIR / "runtime_config.json"
+
+
+def test_simulation_speed_does_not_accelerate_ai_evolution() -> None:
+    """快轉只影響世界 tick，避免頻繁 AI 回合停住世界。"""
+    cooldowns = {
+        settings.EvoConfig(speed_mode=speed).heartbeat_cooldown
+        for speed in ("1x", "3x", "MAX")
+    }
+    assert cooldowns == {settings.AI_EVOLUTION_COOLDOWN}
+
+
+def test_simulation_speed_multipliers_are_exact_and_bounded() -> None:
+    """3x 必須精準為三倍速，MAX 維持明確的安全上限。"""
+    assert settings.TICK_SPEEDS["3x"] == pytest.approx(settings.TICK_SPEEDS["1x"] / 3)
+    assert 1 / settings.TICK_SPEEDS["MAX"] == pytest.approx(20.0)
+    assert settings.AI_EVOLUTION_COOLDOWN == 300.0
 
 
 def test_concurrent_save_config_uses_independent_atomic_temporary_files(tmp_path, monkeypatch):

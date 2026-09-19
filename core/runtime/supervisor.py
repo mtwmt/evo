@@ -1,4 +1,4 @@
-"""Runtime Supervisor 運行監控器：管理 habitat/main.py 進程生命週期。"""
+"""Runtime Supervisor 運行監控器：管理 runtime/habitat/main.py 生命週期。"""
 
 import subprocess
 import threading
@@ -14,7 +14,7 @@ from isolation.verifier import verify_sandbox_boundaries
 
 
 class RuntimeSupervisor:
-    """在沙盒中監督與維護 habitat/ 宇宙主進程。"""
+    """在沙盒中監督與維護 runtime/habitat/ 宇宙主進程。"""
 
     def __init__(
         self,

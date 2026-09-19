@@ -11,11 +11,11 @@ from pydantic import BaseModel, Field
 # 專案根目錄為 evo 倉庫的根目錄
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# 核心目錄路徑
-HABITAT_DIR = PROJECT_ROOT / "habitat"
-HABITAT_STAGING_DIR = PROJECT_ROOT / "habitat_staging"
-BACKUPS_DIR = PROJECT_ROOT / "backups"
-HISTORY_DIR = PROJECT_ROOT / "history"
+# 可完整重置的執行期資料集中在同一個根目錄。
+RUNTIME_DIR = PROJECT_ROOT / "runtime"
+HABITAT_DIR = RUNTIME_DIR / "habitat"
+BACKUPS_DIR = RUNTIME_DIR / "backups"
+HISTORY_DIR = RUNTIME_DIR / "history"
 RUNTIME_CONFIG_PATH = HISTORY_DIR / "runtime_config.json"
 SKILLS_DIR = PROJECT_ROOT / "skills"
 PROMPTS_DIR = PROJECT_ROOT / "prompts"
@@ -23,20 +23,17 @@ OBSERVER_DIR = PROJECT_ROOT / "observer"
 
 # 資料庫路徑（唯一 DB）
 DB_PATH = HABITAT_DIR / "habitat.db"
-STAGING_DB_PATH = HABITAT_STAGING_DIR / "habitat.db"
 
 # 速度預設值（依據 README 5.1）
 TICK_SPEEDS = {
-    "1x": 1.0,      # 宇宙物理每 1.0 秒推進一個 tick
-    "3x": 0.3,      # 宇宙物理每 0.3 秒推進一個 tick
-    "MAX": 0.05,    # 無延遲高速運算
+    "1x": 1.0,       # 宇宙物理每 1.0 秒推進一個 tick
+    "3x": 1.0 / 3.0, # 精準三倍速
+    "MAX": 0.05,     # 20 ticks/s 的安全上限
 }
 
-HEARTBEAT_SPEEDS = {
-    "1x": 60.0,     # AI 認知節拍間隔 60 秒
-    "3x": 15.0,     # AI 認知節拍間隔 15 秒
-    "MAX": 3.0,     # 上一輪結束後間隔 3 秒
-}
+# AI 改程式時必須暫停世界；因此不可隨模擬速度一同加快，否則快轉反而
+# 讓宇宙長時間停在 AI 思考中。速度按鈕只控制 TICK_SPEEDS。
+AI_EVOLUTION_COOLDOWN = 300.0
 
 # 資源硬性限制（依據 README 5.5）
 MAX_CPU_PERCENT = 25.0
@@ -82,8 +79,8 @@ class EvoConfig(BaseModel):
 
     @property
     def heartbeat_cooldown(self) -> float:
-        """取得當前 AI 思考冷卻秒數。"""
-        return HEARTBEAT_SPEEDS[self.speed_mode]
+        """取得與模擬速度獨立的 AI 演化冷卻秒數。"""
+        return AI_EVOLUTION_COOLDOWN
 
 
 _PERSISTED_FIELDS = frozenset({

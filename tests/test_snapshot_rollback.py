@@ -6,27 +6,12 @@ from pathlib import Path
 from core.lifecycle.snapshot import MAX_SNAPSHOT_SETS, LifecycleManager
 
 
-def test_first_deployment_preserves_generated_database(tmp_path: Path):
-    habitat = tmp_path / "habitat"
-    staging = tmp_path / "staging"
-    staging.mkdir()
-    (staging / "main.py").write_text("print('genesis')")
-    with sqlite3.connect(staging / "habitat.db") as conn:
-        conn.execute("CREATE TABLE state (value TEXT)")
-        conn.execute("INSERT INTO state VALUES ('genesis')")
-    LifecycleManager(habitat, tmp_path / "backups").atomic_deploy_staging(staging)
-    with sqlite3.connect(habitat / "habitat.db") as conn:
-        assert conn.execute("SELECT value FROM state").fetchone()[0] == "genesis"
-
-
 def test_snapshot_and_rollback(tmp_path: Path):
     """驗證當候選發布異常時，資料庫與程式碼檔案能夠一鍵完整回滾。"""
     habitat_dir = tmp_path / "habitat"
     backups_dir = tmp_path / "backups"
-    staging_dir = tmp_path / "staging"
     habitat_dir.mkdir()
     backups_dir.mkdir()
-    staging_dir.mkdir()
 
     # 1. 建立初始穩定版本世界代碼與資料庫
     main_code = "print('version 1.0')"
@@ -49,31 +34,54 @@ def test_snapshot_and_rollback(tmp_path: Path):
     assert db_snap.exists()
     assert code_snap.exists()
 
-    # 3. 模擬候選版本（版本 2.0）進行破壞性修改
-    (staging_dir / "main.py").write_text("print('version 2.0 broken')", encoding="utf-8")
-    (staging_dir / ".world-memory").mkdir()
-    (staging_dir / ".world-memory" / "state.json").write_text('{"stage": 2}')
-    with sqlite3.connect(staging_dir / "habitat.db") as conn:
-        conn.execute("CREATE TABLE world (val TEXT);")
-        conn.execute("INSERT INTO world VALUES ('corrupted_v2_data');")
+    # 3. 模擬 AI 直接在 habitat 進行破壞性修改
+    (habitat_dir / "main.py").write_text("print('version 2.0 broken')", encoding="utf-8")
+    (habitat_dir / "obsolete.py").unlink()
+    (habitat_dir / ".world-memory" / "state.json").write_text('{"stage": 2}')
+    with sqlite3.connect(habitat_dir / "habitat.db") as conn:
+        conn.execute("UPDATE world SET val = 'corrupted_v2_data';")
         conn.commit()
 
-    manager.atomic_deploy_staging(staging_dir)
     assert (habitat_dir / "main.py").read_text(encoding="utf-8") == "print('version 2.0 broken')"
     assert not (habitat_dir / "obsolete.py").exists()
     assert (habitat_dir / ".world-memory" / "state.json").read_text() == '{"stage": 2}'
     with sqlite3.connect(db_path) as conn:
-        assert conn.execute("SELECT val FROM world").fetchone()[0] == "v1_data"
+        assert conn.execute("SELECT val FROM world").fetchone()[0] == "corrupted_v2_data"
 
     # 4. 觸發一鍵回滾
     manager.rollback(db_snap, code_snap)
 
     # 5. 驗證代碼與資料庫完整復原為 v1
     assert (habitat_dir / "main.py").read_text(encoding="utf-8") == "print('version 1.0')"
+    assert (habitat_dir / "obsolete.py").exists()
     assert (habitat_dir / ".world-memory" / "state.json").read_text() == '{"stage": 1}'
     with sqlite3.connect(db_path) as conn:
         row = conn.execute("SELECT val FROM world").fetchone()
         assert row[0] == "v1_data"
+
+
+def test_restore_database_snapshot_discards_smoke_test_writes(tmp_path: Path):
+    """既有世界驗證後只還原 DB，保留已完成的 habitat 程式修改。"""
+    habitat = tmp_path / "habitat"
+    backups = tmp_path / "backups"
+    habitat.mkdir()
+    (habitat / "main.py").write_text("print('stable')", encoding="utf-8")
+    with sqlite3.connect(habitat / "habitat.db") as conn:
+        conn.execute("CREATE TABLE state (value TEXT)")
+        conn.execute("INSERT INTO state VALUES ('stable')")
+
+    manager = LifecycleManager(habitat, backups)
+    db_snapshot, _ = manager.create_snapshot()
+    assert db_snapshot is not None
+    (habitat / "main.py").write_text("print('candidate')", encoding="utf-8")
+    with sqlite3.connect(habitat / "habitat.db") as conn:
+        conn.execute("UPDATE state SET value = 'smoke-test'")
+
+    manager.restore_database_snapshot(db_snapshot)
+
+    assert (habitat / "main.py").read_text(encoding="utf-8") == "print('candidate')"
+    with sqlite3.connect(habitat / "habitat.db") as conn:
+        assert conn.execute("SELECT value FROM state").fetchone()[0] == "stable"
 
 
 def test_snapshot_retention_keeps_three_latest_sets(tmp_path: Path):

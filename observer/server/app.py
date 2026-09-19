@@ -90,7 +90,7 @@ async def resource_monitor_loop() -> None:
 async def lifespan(app: FastAPI):
     """應用程式生命週期管理：啟動宇宙進程與後台節拍調度。"""
     print("[Evo Server] 服務啟動，初始化宇宙進程...")
-    # 若 habitat/main.py 存在，嘗試啟動宇宙主程序
+    # 若 runtime/habitat/main.py 存在，嘗試啟動宇宙主程序
     if (HABITAT_DIR / "main.py").exists() and not config.paused:
         with scheduler.lifecycle_lock:
             supervisor.start(tick_interval=config.universe_tick_interval)
@@ -360,7 +360,7 @@ async def toggle_pause(req: PauseRequest):
 
 @app.get("/api/habitat/code")
 async def get_habitat_code():
-    """唯讀檢視 habitat/ 目錄下之所有程式碼內容。"""
+    """唯讀檢視 runtime/habitat/ 目錄下之所有程式碼內容。"""
     if not HABITAT_DIR.exists():
         return {"files": {}}
 
@@ -479,12 +479,17 @@ async def get_history_timeline(limit: int = 50, entity_id: str | None = None):
 
             cursor.execute(
                 f"SELECT {fields} FROM events "
-                "WHERE importance >= 7 "
-                "OR type IN ('epoch_transition', 'history_compression', 'chronicle') "
+                "WHERE type IN ('epoch_transition', 'epoch_change', 'chronicle') "
                 "ORDER BY timestamp DESC LIMIT 30"
             )
+            milestone_by_epoch = {}
+            milestone_priority = {
+                "chronicle": 2,
+                "epoch_transition": 1,
+                "epoch_change": 1,
+            }
             for row in cursor.fetchall():
-                milestones.append({
+                event = {
                     "id": row[0],
                     "type": row[1],
                     "message": row[2],
@@ -492,18 +497,52 @@ async def get_history_timeline(limit: int = 50, entity_id: str | None = None):
                     "timestamp": row[4],
                     "entity_ids": json.loads(row[5]) if row[5] else [],
                     "epoch": row[6],
-                })
+                }
+                epoch_key = event["epoch"] if event["epoch"] is not None else event["id"]
+                existing = milestone_by_epoch.get(epoch_key)
+                if (
+                    existing is None
+                    or milestone_priority.get(event["type"], 0)
+                    > milestone_priority.get(existing["type"], 0)
+                ):
+                    milestone_by_epoch[epoch_key] = event
+            milestones = sorted(
+                milestone_by_epoch.values(),
+                key=lambda event: event["timestamp"] or 0,
+                reverse=True,
+            )[:30]
 
             metrics_row = cursor.execute(
                 "SELECT value FROM world_state WHERE key = 'metrics'"
             ).fetchone()
             if metrics_row:
                 metrics = json.loads(metrics_row[0])
-                current_epoch = int(metrics.get("epoch", 0))
+                try:
+                    current_epoch = int(metrics.get("epoch", 0))
+                except (TypeError, ValueError):
+                    current_epoch = 0
                 civilization_stage = str(
                     metrics.get("epoch_name")
                     or metrics.get("era_name")
                     or metrics.get("civilization_stage", "")
+                )
+
+            state_rows = cursor.execute(
+                "SELECT key, value FROM world_state "
+                "WHERE key IN ('epoch', 'epoch_name', 'era_name', 'civilization_stage')"
+            ).fetchall()
+            state = {row[0]: row[1] for row in state_rows}
+            if current_epoch == 0:
+                try:
+                    current_epoch = int(state.get("epoch", 0))
+                except (TypeError, ValueError):
+                    pass
+            if not civilization_stage:
+                civilization_stage = str(
+                    state.get("epoch_name")
+                    or state.get("era_name")
+                    or state.get("civilization_stage")
+                    or (metrics.get("紀元", "") if metrics_row else "")
                 )
     except Exception:
         pass

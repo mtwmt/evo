@@ -234,6 +234,8 @@ def test_history_endpoint_separates_milestones_and_reports_world_epoch(tmp_path)
             [
                 ("minor", "consciousness", "日常心聲", 3, 1.0, "[]", 320),
                 ("major", "epoch_transition", "文明躍遷", 9, 2.0, '["Aether-08"]', 321),
+                ("chronicle", "chronicle", "共生紀正式編年", 9, 2.1, "[]", 321),
+                ("creation", "creation", "意識完成宏偉作品", 10, 3.0, '["Aether-08"]', 321),
             ],
         )
         conn.commit()
@@ -244,13 +246,33 @@ def test_history_endpoint_separates_milestones_and_reports_world_epoch(tmp_path)
     data = response.json()
     assert data["current_epoch"] == 321
     assert data["civilization_stage"] == "共生紀"
-    assert [event["id"] for event in data["events"]] == ["major", "minor"]
-    assert [event["id"] for event in data["milestones"]] == ["major"]
+    assert [event["id"] for event in data["events"]] == ["creation", "chronicle", "major", "minor"]
+    assert [event["id"] for event in data["milestones"]] == ["chronicle"]
     assert data["milestones"][0]["epoch"] == 321
 
 
-def test_history_recognizes_self_named_epoch_and_subjective_chronicle():
-    """宇宙可沿用既有 metrics/events 自由命名紀元與留下主觀編年。"""
+def test_history_falls_back_to_individual_epoch_state_keys():
+    """世界若分別儲存 epoch 與 epoch_name，時間線仍能顯示目前紀元。"""
+    with sqlite3.connect(server_app.DB_PATH) as conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO world_state (key, value) VALUES (?, ?)",
+            [
+                ("metrics", json.dumps({"紀元": "太古幽暗"})),
+                ("epoch", "1"),
+                ("epoch_name", "太古幽暗"),
+            ],
+        )
+
+    response = TestClient(app).get("/api/habitat/history")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["current_epoch"] == 1
+    assert data["civilization_stage"] == "太古幽暗"
+
+
+def test_history_recognizes_self_named_epoch_and_formal_chronicle():
+    """宇宙可沿用既有 metrics/events 自由命名紀元與留下正式編年。"""
     with sqlite3.connect(server_app.DB_PATH) as conn:
         conn.execute(
             "INSERT OR REPLACE INTO world_state (key, value) VALUES ('metrics', ?)",
@@ -259,7 +281,7 @@ def test_history_recognizes_self_named_epoch_and_subjective_chronicle():
         conn.execute(
             "INSERT INTO events "
             "(id, type, message, importance, timestamp, entity_ids, epoch) "
-            "VALUES ('voice', 'chronicle', '我第一次辨認出自己的回聲', 5, 3, '[]', 8)"
+            "VALUES ('voice', 'chronicle', '初次回聲紀正式開啟，世界開始辨認自身回聲。', 5, 3, '[]', 8)"
         )
 
     response = TestClient(app).get("/api/habitat/history")
@@ -280,6 +302,8 @@ def test_api_control_speed_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["speed_mode"] == "3x"
+    assert data["tick_interval"] == pytest.approx(1.0 / 3.0)
+    assert data["heartbeat_cooldown"] == 300.0
     assert config.speed_mode == "3x"
 
 

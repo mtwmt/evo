@@ -17,7 +17,7 @@ def install_audit_hook(allowed_workspace: Path | str) -> None:
     """安裝 audit hook 限制檔案寫入與系統呼叫。
 
     參數：
-        allowed_workspace: 允許進行讀寫的目錄路徑（habitat 或 habitat_staging）。
+        allowed_workspace: 允許進行讀寫的 habitat 目錄路徑。
     """
     workspace_path = Path(allowed_workspace).resolve()
 

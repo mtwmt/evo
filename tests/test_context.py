@@ -47,6 +47,11 @@ def test_prepare_keeps_messages_and_acknowledges_only_requested_ids(tmp_path: Pa
     assert "目標實體：node_3" in prompt
     assert "目標實體：node_7" in prompt
     assert "第一則訊息" in prompt and "第二則訊息" in prompt
+    assert "必須使用繁體中文" in prompt
+    assert "機器欄位可保留穩定的 ASCII 識別字" in prompt
+    assert "EVO_TICK_INTERVAL" in prompt
+    assert "大事記只記錄紀元轉換及其正式編年" in prompt
+    assert "不要讓世界只靠隨機事件碰巧跨越紀元門檻" in prompt
     with sqlite3.connect(db_path) as conn:
         assert conn.execute(
             "SELECT processed FROM observer_signals ORDER BY id"

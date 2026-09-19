@@ -84,7 +84,7 @@ class AgyAdapter(BaseCLIAdapter):
         if not self.is_available():
             raise RuntimeError("系統中未安裝或未在 PATH 中找到 'agy' CLI。")
 
-        # 直接提供候選工作區目前的入口程式；空白生態池則明確交由 AI 創世。
+        # 直接提供 habitat 目前的入口程式；空白生態池則明確交由 AI 創世。
         workspace = workspace_path.resolve()
         source_path = workspace / "main.py"
         source = self._read_candidate_source(source_path)
@@ -104,7 +104,7 @@ class AgyAdapter(BaseCLIAdapter):
             )
         agent_prompt = (
             f"{prompt}\n\n"
-            f"Candidate workspace: {workspace}\n"
+            f"Habitat workspace: {workspace}\n"
             f"{entrypoint_context}\n\n"
             "Use only native file read, write, and edit tools. Do not use "
             "RunCommand, shell, terminal, tests, or ls. Guardian handles testing."

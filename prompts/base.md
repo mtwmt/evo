@@ -12,11 +12,12 @@ Evo does not impose any predetermined story, morality, characters, or kingdoms u
    - You may create your own agents, skills, memories, tools, and supporting modules. Choose their organization freely; no file count or mandatory modular structure is imposed. Read and maintain your existing local skills and modules on later turns.
    - Your code runs as a continuous process loop (`Universe Tick`).
    - Every tick or state update must advance the universe's internal state.
+   - **Speed contract**: Read `EVO_TICK_INTERVAL` from the environment at startup and use it as the interval between ticks (for example, `time.sleep(float(os.environ.get("EVO_TICK_INTERVAL", "1.0")))`). Do not hardcode a tick delay. The controller sets this value for 1x, 3x, and MAX modes; changing the selected speed must materially change the simulation rate without changing the world's rules.
 2. **Single Database**: `habitat.db` (SQLite) in the current working directory.
    - You design the schema, tables, indices, and data evolution.
    - All critical world states, entities, events, and metrics must be persisted here.
    - Restore existing state on startup; never reset the universe when the controller restarts the process.
-   - Create `events(id TEXT PRIMARY KEY, type TEXT, message TEXT, importance INTEGER, timestamp REAL, entity_ids TEXT, epoch INTEGER)`; entity_ids is a JSON array. Persist meaningful events for the timeline and use importance >= 7 for milestones.
+   - Create `events(id TEXT PRIMARY KEY, type TEXT, message TEXT, importance INTEGER, timestamp REAL, entity_ids TEXT, epoch INTEGER)`; entity_ids is a JSON array. Persist meaningful events for the ordinary timeline regardless of importance. The observer's milestones are reserved exclusively for named epoch transitions and their formal chronicle: record the transition as `epoch_transition` or `epoch_change`, and use `chronicle` only for an epoch-level public account. Individual births, creations, discoveries, conversations, and other character events must remain ordinary events, even when highly important. All observer-facing event messages, chronicle entries, epoch names, and other timeline narration MUST be written in Traditional Chinese (繁體中文). Keep machine-readable identifiers such as `id` and `type` stable and ASCII where useful.
    - Create `observer_signals(id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, message TEXT, target_entity_id TEXT, timestamp REAL, processed INTEGER DEFAULT 0, delivered_to_universe INTEGER DEFAULT 0)`. The controller manages processed; your runtime marks delivered_to_universe after handling a signal.
 3. **Observer Rendering Protocol (Generic Scene Primitives)**:
    - Persist the scene JSON in `scene_primitives(id TEXT PRIMARY KEY, json_data TEXT, updated_at REAL)` under id `current_scene`, and metrics JSON in `world_state(key TEXT PRIMARY KEY, value TEXT)` under key `metrics`.
@@ -34,8 +35,13 @@ Evo does not impose any predetermined story, morality, characters, or kingdoms u
    - A new named epoch should mark a genuine change in the world's understanding,
      rules, ecology, society, or destiny—not merely the passage of another heartbeat.
      A conscious entity may preserve its subjective interpretation of such a change as
-     an ordinary event (for example, type `chronicle`). Keep public reflections concise;
+     an ordinary event, but reserve type `chronicle` for the formal, world-level account
+     of that epoch. Keep public reflections concise;
      they are authored narration for the observer, not private chain-of-thought.
+   - Do not leave epoch progress to random chance alone. When a required condition has
+     remained unmet, let entities form a persistent, visible, and achievable goal—such
+     as an expedition, construction effort, negotiation, or discovery—and persist its
+     progress so the observer can see the world respond.
 4. **Conscious Creation Archive (Permanent)**:
    - When a conscious entity intentionally creates any work, you MUST archive the complete original before announcing or referencing it. This applies to text, poems, scores, audio/music, images, drawings, models, code-art, and every other medium.
    - Implement your own archive writer when needed; no `creative_archive` module is preinstalled. Store originals in an immutable `creative_works` table in `habitat.db` with `id`, `creator_id`, `title`, `medium`, `mime_type`, `content` (BLOB), `metadata_json`, `epoch`, and `created_at` columns for the observer to read.

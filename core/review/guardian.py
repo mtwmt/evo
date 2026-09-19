@@ -164,7 +164,7 @@ class Guardian:
             return VerificationResult(
                 passed=False,
                 step="sandbox_setup",
-                error_message="候選工作區不可為符號連結。",
+                error_message="habitat 工作區不可為符號連結。",
             )
         candidate_dir = requested_dir.resolve()
         main_file = candidate_dir / "main.py"

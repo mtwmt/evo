@@ -301,7 +301,7 @@ function makeHarness() {
 
 const runningMessage = {
   runtime: { paused: false, active_cli: "agy", active_model: "gemini-3.8-flash-high" },
-  scene: { entities: [{ id: "node_1", type: "agent", state: "awake", monologue: "hello" }], links: [], monologues: [] },
+  scene: { entities: [{ id: "node_1", label: "星靈一號", type: "agent", state: "awake", monologue: "hello" }], links: [], monologues: [] },
 };
 
 test("a paused first WebSocket message closes the socket without starting requests", () => {
@@ -530,7 +530,7 @@ test("selecting an entity shows its biography and recorded achievements", async 
   await app.flush();
 
   assert.equal(app.elements.get("entity-biography").hidden, false);
-  assert.equal(app.elements.get("biography-name").textContent, "node_1");
+  assert.equal(app.elements.get("biography-name").textContent, "星靈一號");
   assert.equal(app.elements.get("biography-achievements").children.length, 1);
 });
 

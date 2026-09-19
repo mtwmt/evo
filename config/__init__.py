@@ -1,11 +1,10 @@
 """Evo 設定模組封裝。"""
 
 from config.settings import (
+    AI_EVOLUTION_COOLDOWN,
     BACKUPS_DIR,
     DB_PATH,
     HABITAT_DIR,
-    HABITAT_STAGING_DIR,
-    HEARTBEAT_SPEEDS,
     HISTORY_DIR,
     MAX_CPU_PERCENT,
     MAX_HABITAT_SIZE_BYTES,
@@ -14,8 +13,8 @@ from config.settings import (
     OBSERVER_DIR,
     PROJECT_ROOT,
     PROMPTS_DIR,
+    RUNTIME_DIR,
     SKILLS_DIR,
-    STAGING_DB_PATH,
     TICK_SPEEDS,
     EvoConfig,
     config,
@@ -23,17 +22,16 @@ from config.settings import (
 
 __all__ = [
     "PROJECT_ROOT",
+    "RUNTIME_DIR",
     "HABITAT_DIR",
-    "HABITAT_STAGING_DIR",
     "BACKUPS_DIR",
     "HISTORY_DIR",
     "SKILLS_DIR",
     "PROMPTS_DIR",
     "OBSERVER_DIR",
     "DB_PATH",
-    "STAGING_DB_PATH",
     "TICK_SPEEDS",
-    "HEARTBEAT_SPEEDS",
+    "AI_EVOLUTION_COOLDOWN",
     "MAX_CPU_PERCENT",
     "MAX_RAM_BYTES",
     "MAX_SUBPROCESSES",
