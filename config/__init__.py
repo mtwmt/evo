@@ -1,0 +1,43 @@
+"""Evo 設定模組封裝。"""
+
+from config.settings import (
+    BACKUPS_DIR,
+    DB_PATH,
+    HABITAT_DIR,
+    HABITAT_STAGING_DIR,
+    HEARTBEAT_SPEEDS,
+    HISTORY_DIR,
+    MAX_CPU_PERCENT,
+    MAX_HABITAT_SIZE_BYTES,
+    MAX_RAM_BYTES,
+    MAX_SUBPROCESSES,
+    OBSERVER_DIR,
+    PROJECT_ROOT,
+    PROMPTS_DIR,
+    SKILLS_DIR,
+    STAGING_DB_PATH,
+    TICK_SPEEDS,
+    EvoConfig,
+    config,
+)
+
+__all__ = [
+    "PROJECT_ROOT",
+    "HABITAT_DIR",
+    "HABITAT_STAGING_DIR",
+    "BACKUPS_DIR",
+    "HISTORY_DIR",
+    "SKILLS_DIR",
+    "PROMPTS_DIR",
+    "OBSERVER_DIR",
+    "DB_PATH",
+    "STAGING_DB_PATH",
+    "TICK_SPEEDS",
+    "HEARTBEAT_SPEEDS",
+    "MAX_CPU_PERCENT",
+    "MAX_RAM_BYTES",
+    "MAX_SUBPROCESSES",
+    "MAX_HABITAT_SIZE_BYTES",
+    "EvoConfig",
+    "config",
+]

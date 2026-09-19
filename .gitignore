@@ -1,0 +1,134 @@
+# ==========================================
+# Evo（衍界）專案 .gitignore
+# ==========================================
+
+# ------------------------------------------
+# Python 執行與字節碼快取
+# ------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ------------------------------------------
+# Python 虛擬環境
+# ------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ------------------------------------------
+# 測試、測試覆蓋率與 Linter 快取
+# ------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# ------------------------------------------
+# Python 打包與構建產物（僅忽略根目錄 build/dist）
+# ------------------------------------------
+/build/
+/dist/
+*.egg-info/
+*.egg
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+
+# ------------------------------------------
+# Node.js / 前端 (observer/web) 依賴與快取
+# ------------------------------------------
+node_modules/
+.npm
+.pnpm-store
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 註：README 註明 observer/web/dist 已預先編譯以便開箱即用；
+# 若未來希望前端 dist 不入版本控制，可取消下一行註解：
+# /observer/web/dist/
+
+# ------------------------------------------
+# Evo 系統執行期資料庫、快照與臨時目錄
+# ------------------------------------------
+# SQLite 執行期資料庫與 WAL 檔案
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# 執行期日誌
+*.log
+
+# Staging 候選目錄（由排程器動態複製與替換）
+/habitat_staging/
+
+# 快照備份目錄（保留目錄本身結構，忽略動態快照內容）
+/backups/*
+!/backups/.gitkeep
+*.sqlite
+
+# 歷史事件歸納目錄（若有動態生成）
+/history/*
+!/history/.gitkeep
+
+# 原子部署臨時目錄
+.habitat.deploy-*
+.habitat.previous-*
+
+# ------------------------------------------
+# 編輯器與 IDE 設定
+# ------------------------------------------
+.vscode/*
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ------------------------------------------
+# 作業系統與系統隱藏檔
+# ------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ------------------------------------------
+# 環境變數與機密金鑰
+# ------------------------------------------
+.env
+.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+
+# TypeScript 增量編譯快取
+*.tsbuildinfo

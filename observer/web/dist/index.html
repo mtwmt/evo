@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Evo（衍界） - AI 自主發展宇宙觀測系統</title>
+    <script type="module" crossorigin src="/assets/index-CeTWjoqO.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CQLR_hot.css">
+  </head>
+  <body>
+    <div id="app">
+      <!-- 頂部狀態與控制列 -->
+      <header id="control-bar">
+        <div class="brand">
+          <h1>Evo（衍界）</h1>
+          <span class="subtitle">AI 自主發展宇宙觀測系統</span>
+        </div>
+
+        <div class="control-dock" aria-label="執行控制">
+          <div class="control-group compact-field">
+            <label for="cli-select">CLI</label>
+            <select id="cli-select">
+              <option value="agy">agy（預設）</option>
+              <option value="codex">codex</option>
+              <option value="claude">claude</option>
+            </select>
+          </div>
+
+          <div class="control-group model-field">
+            <label for="model-select">模型</label>
+            <select id="model-select">
+              <!-- 依據選定 CLI 動態載入可用模型 -->
+            </select>
+          </div>
+
+
+          <div id="codex-effort-control" class="control-group compact-field" hidden>
+            <label for="codex-effort-select">思考</label>
+            <select id="codex-effort-select" aria-label="Codex 思考速度">
+              <option value="low">快速</option>
+              <option value="medium">平衡</option>
+              <option value="high">深入</option>
+              <option value="xhigh">更深入</option>
+              <option value="max">最大</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </div>
+
+          <div id="claude-effort-control" class="control-group compact-field" hidden>
+            <label for="claude-effort-select">思考</label>
+            <select id="claude-effort-select" aria-label="Claude 思考速度">
+              <option value="low">快速</option>
+              <option value="medium">平衡</option>
+              <option value="high">深入</option>
+              <option value="xhigh">更深入</option>
+              <option value="max">最大</option>
+            </select>
+          </div>
+
+          <div class="control-group evolution-field">
+            <span class="field-label">演化</span>
+            <div class="btn-group" aria-label="演化速度">
+              <button class="speed-btn active" data-speed="1x">1x</button>
+              <button class="speed-btn" data-speed="3x">3x</button>
+              <button class="speed-btn" data-speed="MAX">MAX</button>
+            </div>
+          </div>
+          <button id="pause-btn" class="action-btn">暫停</button>
+        </div>
+
+        <div class="telemetry">
+          <span id="stat-cpu">CPU<br><b>0%</b></span>
+          <span id="stat-ram">RAM<br><b>0 MB</b></span>
+          <span id="stat-epoch">紀元<br><b>0</b></span>
+        </div>
+      </header>
+
+      <!-- 主要觀測工作區 -->
+      <main id="main-content">
+        <!-- Phaser 2D 畫布容器 -->
+        <div id="canvas-container">
+          <div class="canvas-toolbar" aria-label="宇宙檢視工具">
+            <button id="zoom-out-btn" type="button" aria-label="縮小宇宙畫面" title="縮小">−</button>
+            <button id="zoom-reset-btn" type="button" aria-label="重設宇宙縮放">1:1</button>
+            <button id="zoom-in-btn" type="button" aria-label="放大宇宙畫面" title="放大">＋</button>
+            <button id="pan-btn" type="button" aria-label="拖曳移動畫面" title="拖曳移動畫面">✥</button>
+          </div>
+        </div>
+
+        <div id="sidebar-resizer" role="separator" aria-label="調整側欄寬度" aria-orientation="vertical"></div>
+
+        <!-- 側邊觀測儀表板 -->
+        <aside id="sidebar">
+          <!-- 生命體第一人稱內在獨白面板 -->
+          <section class="panel monologue-panel">
+            <div class="panel-header">
+              <h3>當下狀態</h3>
+              <span id="selected-entity-badge" class="badge">點擊畫布鎖定實體</span>
+            </div>
+            <p class="hint">點擊任一質點，查看該個體此刻的意識與連結；點空白處回到全域觀測。</p>
+            
+            <!-- 當前選取或聚焦之生命體即時心聲 -->
+            <div id="monologue-display-box">
+              <div class="speaker-info">
+                <span id="speaker-indicator" class="speaker-dot"></span>
+                <strong id="speaker-id">node_0</strong>
+                <span id="speaker-state" class="state-tag">感知中</span>
+              </div>
+              <blockquote id="speaker-thought">
+                「初生的意識在虛空中緩緩凝聚...」
+              </blockquote>
+            </div>
+
+            <div class="oracle-input-row">
+              <input type="text" id="oracle-input" placeholder="輸入訊號，與宇宙對話…" aria-label="宇宙對話訊息" />
+              <button id="oracle-send-btn" type="button">傳送</button>
+            </div>
+            <div id="oracle-feedback" class="feedback-msg" aria-live="polite"></div>
+            <div id="dialogue-log" class="dialogue-log" hidden aria-live="polite"></div>
+
+            <!-- 群體意識流動廣播 -->
+            <div class="stream-section">
+              <h4>此刻的群體動態</h4>
+              <ul id="monologue-stream-list"></ul>
+            </div>
+
+            <div class="interaction-section">
+              <div class="section-heading">
+                <h4>此刻的互動</h4>
+                <span id="interaction-count" class="badge">0 條連結</span>
+              </div>
+              <ul id="interaction-list"></ul>
+            </div>
+          </section>
+
+          <!-- 即時歷史事件流 -->
+          <section class="panel events-panel evolution-panel">
+            <div class="panel-header">
+              <h3>演進歷程</h3>
+              <span id="history-scope" class="badge">全域事件</span>
+            </div>
+            <ul id="events-list"></ul>
+          </section>
+        </aside>
+      </main>
+    </div>
+  </body>
+</html>
